@@ -12,6 +12,11 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    
+    joiningDate: {
+        type: Date,
+        default: Date.now,
+      },
 
     // ===== ADMIN =====
     admin: {
@@ -53,11 +58,6 @@ const userSchema = new mongoose.Schema(
       gender: {
         type: String,
       },
-
-      joiningDate: {
-        type: Date,
-        default: Date.now,
-      },
     },
 
     // ===== STAFF =====
@@ -86,12 +86,10 @@ const userSchema = new mongoose.Schema(
         type: String,
       },
 
-      joiningDate: {
-        type: Date,
-        default: Date.now,
-      },
+  
     },
   },
+  
   {
     timestamps: true,
   }

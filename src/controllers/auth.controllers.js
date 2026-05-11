@@ -1,4 +1,6 @@
-import { registerStaffService } from "../services/auth.services.js";
+import { registerManagerService, registerStaffService } from "../services/auth.services.js";
+
+// Staff Registration
 
 export const registerStaff = async(req,res) => {
 
@@ -10,7 +12,7 @@ export const registerStaff = async(req,res) => {
 
         return res.status(201).json({
             status: "Success",
-            message: "Staff Registered Succefully",
+            message: "Staff Registered Successfully",
             data: staff
         });
         
@@ -25,3 +27,29 @@ export const registerStaff = async(req,res) => {
     }
 }
 
+
+// Manager Registration
+
+export const registerManager = async(req,res) => {
+
+    try {
+
+        const InputData = req.body;
+
+        const manager = await registerManagerService(InputData);
+
+        return res.status(201).json({
+            status: "Success",
+            message: "Manager Registered Successfully",
+            data: manager
+        });
+        
+    } catch (error) {
+
+        return res.status(401).json({
+            status: "Error",
+            message: error.message || "Error in Registration"
+        });
+        
+    }
+}
