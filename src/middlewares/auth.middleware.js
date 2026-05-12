@@ -17,10 +17,10 @@ export const authenticate = (req,res) => {
         const decoded = jwt.verify(token,process.env.JWT_SECRET);
 
            // normalize user
-        // req.user = {
-        //    userId: decoded.userId || decoded.id,
-        //    role: decoded.role
-        //  }; 
+        req.user = {
+           userId: decoded.userId || decoded.id,
+           role: decoded.role
+         }; 
 
         next();
 
