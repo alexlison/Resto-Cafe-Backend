@@ -1,12 +1,14 @@
 import express from "express"
-import {registerManager, registerStaff} from "../controllers/auth.controllers.js"
-import { authenticate } from "../middlewares/auth.middleware.js";
+import {Login, registerManager, registerStaff} from "../controllers/auth.controllers.js"
 
 const router = express.Router();
 
-router.use(authenticate);
 
+// Registration
 router.post("/registerStaff",registerStaff);
 router.post("/registerManager",registerManager);
+
+// login
+router.post("/login",Login);
 
 export default router;

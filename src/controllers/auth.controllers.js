@@ -1,4 +1,4 @@
-import { registerManagerService, registerStaffService } from "../services/auth.services.js";
+import { loginService, registerManagerService, registerStaffService } from "../services/auth.services.js";
 
 // Staff Registration
 
@@ -49,6 +49,33 @@ export const registerManager = async(req,res) => {
         return res.status(401).json({
             status: "Error",
             message: error.message || "Error in Registration"
+        });
+        
+    }
+}
+
+// Login
+
+export const Login = async(req,res) => {
+
+    try {
+
+        const { email, password } = req.body;
+
+        const result = await loginService(email,password);
+
+        return res.status(200).json({
+            status: "Success",
+            message: "Login Successfull",
+            user: result.user,
+            token: result.token
+        });
+        
+    } catch (error) {
+
+        return res.status(error.statusCode || 400).json({
+            Status: "Error",
+            message: error.message || "Login failed"
         });
         
     }
