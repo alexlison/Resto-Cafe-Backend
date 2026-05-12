@@ -12,7 +12,7 @@ export const isAdmin = async (req, res, next) => {
         // Check admin role
         if (req.user.role !== "admin") {
             return res.status(403).json({
-                status: "Error",
+                status: "NOTADMIN",
                 message: "Access denied. Admin can only Access."
             });
         }

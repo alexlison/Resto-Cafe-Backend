@@ -1,6 +1,7 @@
 import express from "express"
 import users from "../models/users.model.js"
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 // Staff Register Service
 
@@ -92,3 +93,84 @@ export const registerManagerService = async(data) => {
     return manager;
 
 }
+
+// Login Service
+
+export const loginService = async (email, password) => {
+
+    let user = null;
+
+    // ===== CHECK ADMIN =====
+    user = await users.findOne({
+        "admin.email": email
+    });
+
+    let userType = "admin";
+
+    // ===== CHECK MANAGER =====
+    if (!user) {
+
+        user = await users.findOne({
+            "manager.email": email
+        });
+
+        userType = "manager";
+    }
+
+    // ===== CHECK STAFF =====
+    if (!user) {
+
+        user = await users.findOne({
+            "staff.email": email
+        });
+
+        userType = "staff";
+    }
+
+    // ===== USER NOT FOUND =====
+    if (!user) {
+        throw new Error("Invalid email or password");
+    }
+
+    let storedPassword = "";
+
+    if (userType === "admin") {
+        storedPassword = user.admin.password;
+    }
+
+    if (userType === "manager") {
+        storedPassword = user.manager.password;
+    }
+
+    if (userType === "staff") {
+        storedPassword = user.staff.password;
+    }
+
+    // ===== PASSWORD CHECK =====
+    const isPasswordValid = await bcrypt.compare(
+        password,
+        storedPassword
+    );
+
+    if (!isPasswordValid) {
+        throw new Error("Invalid email or password");
+    }
+
+    // ===== JWT TOKEN =====
+    const token = jwt.sign(
+        {
+            userId: user._id,
+            role: user.role
+        },
+        process.env.JWT_SECRET,
+        {
+            expiresIn: process.env.JWT_EXPIRES_IN
+        }
+    );
+
+    return {
+        token,
+        user
+    };
+
+};
