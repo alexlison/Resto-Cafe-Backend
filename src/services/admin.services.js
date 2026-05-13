@@ -11,3 +11,14 @@ export const getAllStaff = async () => {
     return staffs;
 
 };
+
+// Get All Managers Service
+export const getAllManagers = async () => {
+
+    const Managers = await users.find({
+        role: "manager"
+    }).select("-manager.password");
+
+    return Managers;
+
+};
