@@ -1,7 +1,7 @@
 import express from "express";
 import { authenticate } from "../middlewares/auth.middleware.js";
 import { isAdmin } from "../middlewares/admin.middleware.js";
-import { viewAllStaff } from "../controllers/admin.controllers.js";
+import { viewAllManagers, viewAllStaff } from "../controllers/admin.controllers.js";
 
 const router = express.Router();
 
@@ -13,5 +13,6 @@ router.use(isAdmin);
 
 // view All Staff
 router.get("/viewAllStaff",viewAllStaff);
+router.get("/viewAllManagers",viewAllManagers);
 
 export default router;
