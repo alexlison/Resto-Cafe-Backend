@@ -17,7 +17,7 @@ const ingredientSchema = new mongoose.Schema({
     subCategoryId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "subcategories",
-        required: true
+        default: null
     },
 
     brandId: {
@@ -48,8 +48,8 @@ const ingredientSchema = new mongoose.Schema({
         default: true
     }
 
-}, {
-    timestamps: true
+},{
+    timestamps:true
 });
 
 export default mongoose.model(
