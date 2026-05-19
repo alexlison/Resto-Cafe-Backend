@@ -6,6 +6,7 @@ import { addSubCategory, editSubCategory, toggleSubCategoryStatus, viewAllSubCat
 import { addVendor, editVendor, toggleVendorStatus, viewAllVendor } from "../controllers/vendor.controllers.js";
 import { addBrand, editBrand, toggleBrandStatus, viewAllBrand } from "../controllers/brand.controllers.js";
 import { addIngredient, editIngredient, toggleIngredientStatus, viewAllIngredient } from "../controllers/ingredient.controllers.js";
+import { addRecipe, editRecipe, toggleRecipeStatus, viewAllRecipe } from "../controllers/recipe.controllers.js";
 
 const router = express.Router();
 
@@ -45,6 +46,12 @@ router.post("/addIngredient",addIngredient);
 router.put("/editIngredient/:id",editIngredient);
 router.get("/viewAllIngredient",viewAllIngredient);
 router.patch("/toggleIngredientStatus/:id",toggleIngredientStatus);
+
+// Recipe Routes
+router.post("/addRecipe",addRecipe);
+router.put("/editRecipe/:id",editRecipe);
+router.get("/viewAllRecipe",viewAllRecipe);
+router.patch("/toggleRecipeStatus/:id",toggleRecipeStatus);
 
 
 export default router;
