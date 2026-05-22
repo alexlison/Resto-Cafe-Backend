@@ -7,6 +7,7 @@ import { addVendor, editVendor, toggleVendorStatus, viewAllVendor } from "../con
 import { addBrand, editBrand, toggleBrandStatus, viewAllBrand } from "../controllers/brand.controllers.js";
 import { addIngredient, editIngredient, toggleIngredientStatus, viewAllIngredient } from "../controllers/ingredient.controllers.js";
 import { addRecipe, editRecipe, toggleRecipeStatus, viewAllRecipe } from "../controllers/recipe.controllers.js";
+import { addPurchase, viewAllPurchase } from "../controllers/purchase.controllers.js";
 
 const router = express.Router();
 
@@ -52,6 +53,10 @@ router.post("/addRecipe",addRecipe);
 router.put("/editRecipe/:id",editRecipe);
 router.get("/viewAllRecipe",viewAllRecipe);
 router.patch("/toggleRecipeStatus/:id",toggleRecipeStatus);
+
+// Purchase Routes
+router.post("/addPurchase",addPurchase);
+router.get("/viewAllPurchase",viewAllPurchase);
 
 
 export default router;
