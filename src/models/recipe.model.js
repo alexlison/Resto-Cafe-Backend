@@ -41,6 +41,11 @@ const recipeSchema = new mongoose.Schema({
         required: true
     },
 
+    recipeImage: {
+    type: String
+
+    },
+
     isActive: {
         type: Boolean,
         default: true

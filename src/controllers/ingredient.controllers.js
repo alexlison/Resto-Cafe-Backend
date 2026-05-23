@@ -11,56 +11,102 @@ import {
 // Add Ingredient
 export const addIngredient = async(req,res)=>{
 
-    try{
+try{
 
-        const result=
-        await addIngredientService(
-            req.body
-        );
+    const ingredientData =
+    req.body;
 
-        return res.status(201).json({
-            status:"SUCCESS",
-            message:"Ingredient added successfully",
-            data:result
-        });
+    let imageUrl=null;
 
-    }catch(error){
+    if(req.file){
 
-        return res.status(500).json({
-            status:"FAILED",
-            message:error.message
-        });
+        imageUrl=
+        `/ingredients/${req.file.filename}`;
 
     }
+
+    const result=
+    await addIngredientService(
+        ingredientData,
+        imageUrl
+    );
+
+    return res.status(201).json({
+
+        status:"SUCCESS",
+        message:
+        "Ingredient added successfully",
+
+        data:result
+
+    });
+
+}
+catch(error){
+
+    return res.status(500).json({
+
+        status:"FAILED",
+        message:error.message
+
+    });
+
+}
 
 };
 
 
+
 // Edit Ingredient
-export const editIngredient = async(req,res)=>{
 
-    try{
 
-        const result=
-        await editIngredientService(
-            req.params.id,
-            req.body
-        );
+export const editIngredient =
+async(req,res)=>{
 
-        return res.status(200).json({
-            status:"SUCCESS",
-            message:"Ingredient updated successfully",
-            data:result
-        });
+try{
 
-    }catch(error){
+    const updateData =
+    req.body;
 
-        return res.status(500).json({
-            status:"FAILED",
-            message:error.message
-        });
+    let imageUrl=null;
+
+    if(req.file){
+
+        imageUrl=
+        `/ingredients/${req.file.filename}`;
 
     }
+
+    const result=
+    await editIngredientService(
+
+        req.params.id,
+        updateData,
+        imageUrl
+
+    );
+
+    return res.status(200).json({
+
+        status:"SUCCESS",
+        message:
+        "Ingredient updated successfully",
+
+        data:result
+
+    });
+
+}
+catch(error){
+
+    return res.status(500).json({
+
+        status:"FAILED",
+        message:error.message
+
+    });
+
+}
 
 };
 

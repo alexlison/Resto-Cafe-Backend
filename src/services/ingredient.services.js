@@ -6,137 +6,27 @@ import brands from "../models/brand.model.js";
 
 
 // Add Ingredient
-export const addIngredientService = async(data)=>{
 
-    const {
+export const addIngredientService =
+    async (data, imageUrl = null) => {
 
-        ingredientName,
-        categoryId,
-        subCategoryId,
-        brandId
+        const {
 
-    } = data;
+            ingredientName,
+            categoryId,
+            subCategoryId,
+            brandId
 
-
-    // Category validation
-    const category =
-    await categories.findById(
-        categoryId
-    );
-
-    if(!category){
-
-        throw new Error(
-            "Category not found"
-        );
-
-    }
+        } = data;
 
 
-    // Optional subcategory validation
-    if(subCategoryId){
-
-        const subCategory =
-        await subcategories.findById(
-            subCategoryId
-        );
-
-        if(!subCategory){
-
-            throw new Error(
-                "Subcategory not found"
-            );
-
-        }
-
-        // Check subcategory belongs to category
-        if(
-            subCategory.categoryId.toString()
-            !==
-            categoryId
-        ){
-
-            throw new Error(
-                "Subcategory does not belong to selected category"
-            );
-
-        }
-
-    }
-
-
-    // Brand validation
-    const brand =
-    await brands.findById(
-        brandId
-    );
-
-    if(!brand){
-
-        throw new Error(
-            "Brand not found"
-        );
-
-    }
-
-
-    // Duplicate validation
-    const existingIngredient =
-    await ingredients.findOne({
-
-        ingredientName,
-
-        brandId,
-
-        categoryId,
-
-        subCategoryId:
-        subCategoryId || null
-
-    });
-
-    if(existingIngredient){
-
-        throw new Error(
-            "Ingredient already exists"
-        );
-
-    }
-
-
-    const ingredient =
-    await ingredients.create(
-        data
-    );
-
-    return ingredient;
-
-};
-
-
-
-// Edit Ingredient
-export const editIngredientService = async(id,data)=>{
-
-
-    const {
-
-        ingredientName,
-        categoryId,
-        subCategoryId,
-        brandId
-
-    } = data;
-
-
-    if(categoryId){
-
+        // Category Validation
         const category =
-        await categories.findById(
-            categoryId
-        );
+            await categories.findById(
+                categoryId
+            );
 
-        if(!category){
+        if (!category) {
 
             throw new Error(
                 "Category not found"
@@ -144,47 +34,54 @@ export const editIngredientService = async(id,data)=>{
 
         }
 
-    }
+
+        // Subcategory Validation
+        if (subCategoryId) {
+
+            const subCategory =
+                await subcategories.findById(
+                    subCategoryId
+                );
+
+            if (!subCategory) {
+
+                throw new Error(
+                    "Subcategory not found"
+                );
+
+            }
 
 
-    if(subCategoryId){
+            if (
 
-        const subCategory =
-        await subcategories.findById(
-            subCategoryId
-        );
+                subCategory
+                    .categoryId
+                    .toString()
 
-        if(!subCategory){
+                !==
 
-            throw new Error(
-                "Subcategory not found"
-            );
+                categoryId
+
+            ) {
+
+                throw new Error(
+
+                    "Subcategory does not belong to selected category"
+
+                );
+
+            }
 
         }
 
-        if(
-            subCategory.categoryId.toString()
-            !==
-            categoryId
-        ){
 
-            throw new Error(
-                "Subcategory does not belong to selected category"
-            );
-
-        }
-
-    }
-
-
-    if(brandId){
-
+        // Brand Validation
         const brand =
-        await brands.findById(
-            brandId
-        );
+            await brands.findById(
+                brandId
+            );
 
-        if(!brand){
+        if (!brand) {
 
             throw new Error(
                 "Brand not found"
@@ -192,50 +89,193 @@ export const editIngredientService = async(id,data)=>{
 
         }
 
-    }
 
+        // Duplicate Validation
+        const existingIngredient =
+            await ingredients.findOne({
 
-    const existingIngredient =
-    await ingredients.findOne({
+                ingredientName,
 
-        ingredientName,
+                categoryId,
 
-        brandId,
+                brandId,
 
-        categoryId,
+                subCategoryId:
+                    subCategoryId || null
 
-        subCategoryId:
-        subCategoryId || null,
+            });
 
-        _id:{
-            $ne:id
+        if (existingIngredient) {
+
+            throw new Error(
+                "Ingredient already exists"
+            );
+
         }
 
-    });
+
+        // Add Image URL
+        if (imageUrl) {
+
+            data.ingredientImage =
+                imageUrl;
+
+        }
 
 
-    if(existingIngredient){
+        const ingredient =
+            await ingredients.create(
+                data
+            );
 
-        throw new Error(
-            "Ingredient already exists"
+        return ingredient;
+
+    };
+
+
+
+// Edit Ingredient
+
+export const editIngredientService =
+    async (id, data, imageUrl = null) => {
+
+
+        const {
+
+            ingredientName,
+            categoryId,
+            subCategoryId,
+            brandId
+
+        } = data;
+
+
+        // Category Validation
+        if (categoryId) {
+
+            const category =
+                await categories.findById(
+                    categoryId
+                );
+
+            if (!category) {
+
+                throw new Error(
+                    "Category not found"
+                );
+
+            }
+
+        }
+
+
+        // Subcategory Validation
+        if (subCategoryId) {
+
+            const subCategory =
+                await subcategories.findById(
+                    subCategoryId
+                );
+
+            if (!subCategory) {
+
+                throw new Error(
+                    "Subcategory not found"
+                );
+
+            }
+
+            if (
+
+                subCategory
+                    .categoryId
+                    .toString()
+
+                !==
+
+                categoryId
+
+            ) {
+
+                throw new Error(
+
+                    "Subcategory does not belong to selected category"
+
+                );
+
+            }
+
+        }
+
+
+        // Brand Validation
+        if (brandId) {
+
+            const brand =
+                await brands.findById(
+                    brandId
+                );
+
+            if (!brand) {
+
+                throw new Error(
+                    "Brand not found"
+                );
+
+            }
+
+        }
+
+
+        // Duplicate Validation
+        const existingIngredient =
+            await ingredients.findOne({
+
+                ingredientName,
+                categoryId,
+                brandId,
+
+                subCategoryId:
+                    subCategoryId || null,
+
+                _id: {
+                    $ne: id
+                }
+
+            });
+
+
+        if (existingIngredient) {
+
+            throw new Error(
+                "Ingredient already exists"
+            );
+
+        }
+
+
+        // Image Update
+        if (imageUrl) {
+
+            data.ingredientImage =
+                imageUrl;
+
+        }
+
+
+        return await ingredients.findByIdAndUpdate(
+
+            id,
+            data,
+            { new: true }
+
         );
 
-    }
-
-
-    return await ingredients.findByIdAndUpdate(
-
-        id,
-        data,
-        {new:true}
-
-    );
-
-};
+    };
 
 
 // View All
-export const getAllIngredientService = async()=>{
+export const getAllIngredientService = async () => {
 
     return await ingredients.find();
 
@@ -243,12 +283,12 @@ export const getAllIngredientService = async()=>{
 
 
 // Toggle
-export const toggleIngredientStatusService = async(id)=>{
+export const toggleIngredientStatusService = async (id) => {
 
     const ingredient =
-    await ingredients.findById(id);
+        await ingredients.findById(id);
 
-    if(!ingredient){
+    if (!ingredient) {
 
         throw new Error(
             "Ingredient not found"
@@ -257,7 +297,7 @@ export const toggleIngredientStatusService = async(id)=>{
     }
 
     ingredient.isActive =
-    !ingredient.isActive;
+        !ingredient.isActive;
 
     await ingredient.save();
 

@@ -5,19 +5,24 @@ import ingredients from "../models/ingredient.model.js";
 
 
 // ADD RECIPE
-export const addRecipeService = async (data) => {
+
+export const addRecipeService = async (data, imageUrl = null) => {
 
     const {
+
         recipeName,
         recipeItems,
         recipeCost,
         sellingPrice
+
     } = data;
 
-    // Duplicate recipe check
+
     const existingRecipe =
         await recipes.findOne({
+
             recipeName
+
         });
 
     if (existingRecipe) {
@@ -28,8 +33,11 @@ export const addRecipeService = async (data) => {
 
     }
 
-    // Validate ingredients
-    for (const item of recipeItems) {
+
+    for (
+        const item
+        of recipeItems
+    ) {
 
         const ingredient =
             await ingredients.findById(
@@ -46,17 +54,31 @@ export const addRecipeService = async (data) => {
 
     }
 
-    // Validate price
+
     if (
-        sellingPrice <
+
+        sellingPrice
+        <
         recipeCost
+
     ) {
 
         throw new Error(
+
             "Selling price cannot be less than recipe cost"
+
         );
 
     }
+
+
+    if (imageUrl) {
+
+        data.recipeImage =
+            imageUrl;
+
+    }
+
 
     const recipe =
         await recipes.create(
@@ -68,16 +90,18 @@ export const addRecipeService = async (data) => {
 };
 
 
+
+
 // EDIT RECIPE
 
-export const editRecipeService =
-async (id, data) => {
+export const editRecipeService = async(id,data,imageUrl=null)=>{
 
-    // Recipe exists check
     const currentRecipe =
-        await recipes.findById(id);
+    await recipes.findById(
+        id
+    );
 
-    if (!currentRecipe) {
+    if(!currentRecipe){
 
         throw new Error(
             "Recipe not found"
@@ -85,22 +109,26 @@ async (id, data) => {
 
     }
 
-    // Check duplicate only if name changed
-    if (
+
+    // Recipe name duplicate check
+    if(
+
         data.recipeName &&
+
         data.recipeName !==
         currentRecipe.recipeName
-    ) {
+
+    ){
 
         const existingRecipe =
-            await recipes.findOne({
+        await recipes.findOne({
 
-                recipeName:
-                    data.recipeName
+            recipeName:
+            data.recipeName
 
-            });
+        });
 
-        if (existingRecipe) {
+        if(existingRecipe){
 
             throw new Error(
                 "Recipe name already exists"
@@ -111,46 +139,70 @@ async (id, data) => {
     }
 
 
-    // Validate ingredients
-    for (const item of data.recipeItems) {
+    // Validate ingredients only if recipeItems exists
+    if(data.recipeItems){
 
-        const ingredient =
+        for(
+            const item
+            of data.recipeItems
+        ){
+
+            const ingredient =
             await ingredients.findById(
                 item.ingredientId
             );
 
-        if (!ingredient) {
+            if(!ingredient){
 
-            throw new Error(
-                "Ingredient not found"
-            );
+                throw new Error(
+                    "Ingredient not found"
+                );
+
+            }
 
         }
 
     }
 
 
-    // Validate selling price
-    if (
-        data.sellingPrice <
-        data.recipeCost
-    ) {
+    // Price validation only if values exist
+    if(
+
+        data.sellingPrice &&
+        data.recipeCost &&
+
+        Number(data.sellingPrice)
+        <
+        Number(data.recipeCost)
+
+    ){
 
         throw new Error(
+
             "Selling price cannot be less than recipe cost"
+
         );
 
     }
 
 
+    // Update image only
+    if(imageUrl){
+
+        data.recipeImage =
+        imageUrl;
+
+    }
+
+
     const updatedRecipe =
-        await recipes.findByIdAndUpdate(
+    await recipes.findByIdAndUpdate(
 
-            id,
-            data,
-            { new: true }
+        id,
+        data,
+        {new:true}
 
-        );
+    );
 
     return updatedRecipe;
 

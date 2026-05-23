@@ -42,6 +42,11 @@ const ingredientSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
+    
+    ingredientImage: {
+    type: String
+    
+    },
 
     isActive: {
         type: Boolean,
