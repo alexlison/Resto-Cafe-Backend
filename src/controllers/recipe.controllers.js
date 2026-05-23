@@ -9,61 +9,150 @@ import {
 
 
 // Add Recipe
-export const addRecipe = async (req, res) => {
+export const addRecipe =
+async(req,res)=>{
 
-  try {
+try{
+
+    const recipeData =
+    req.body;
+
+
+    // Convert recipeItems string → array
+    if(
+
+        recipeData.recipeItems &&
+        typeof recipeData.recipeItems
+        === "string"
+
+    ){
+
+        recipeData.recipeItems =
+        JSON.parse(
+            recipeData.recipeItems
+        );
+
+    }
+
+
+    let imageUrl = null;
+
+    if(req.file){
+
+        imageUrl =
+        `/recipes/${req.file.filename}`;
+
+    }
+
 
     const result =
-      await addRecipeService(
-        req.body
-      );
+    await addRecipeService(
+
+        recipeData,
+        imageUrl
+
+    );
 
     return res.status(201).json({
-      status: "SUCCESS",
-      message: "Recipe added successfully",
-      data: result
+
+        status:"SUCCESS",
+
+        message:
+        "Recipe added successfully",
+
+        data:result
+
     });
 
-  } catch (error) {
+}
+catch(error){
 
     return res.status(500).json({
-      status: "FAILED",
-      message: error.message
+
+        status:"FAILED",
+
+        message:error.message
+
     });
 
-  }
+}
 
 };
+
+
 
 
 // Edit Recipe
-export const editRecipe = async (req, res) => {
+export const editRecipe =
+async(req,res)=>{
 
-  try {
+try{
+
+    const updateData =
+    req.body;
+
+
+    // Convert recipeItems string → array
+    if(
+
+        updateData.recipeItems &&
+        typeof updateData.recipeItems
+        === "string"
+
+    ){
+
+        updateData.recipeItems =
+        JSON.parse(
+            updateData.recipeItems
+        );
+
+    }
+
+
+    let imageUrl = null;
+
+    if(req.file){
+
+        imageUrl =
+        `/recipes/${req.file.filename}`;
+
+    }
+
 
     const result =
-      await editRecipeService(
+    await editRecipeService(
+
         req.params.id,
-        req.body
-      );
+        updateData,
+        imageUrl
+
+    );
 
     return res.status(200).json({
-      status: "SUCCESS",
-      message: "Recipe updated successfully",
-      data: result
+
+        status:"SUCCESS",
+
+        message:
+        "Recipe updated successfully",
+
+        data:result
+
     });
 
-  } catch (error) {
+}
+catch(error){
 
     return res.status(500).json({
-      status: "FAILED",
-      message: error.message
+
+        status:"FAILED",
+
+        message:error.message
+
     });
 
-  }
+}
 
 };
-
 
 // View All Recipe
 export const viewAllRecipe = async (req, res) => {

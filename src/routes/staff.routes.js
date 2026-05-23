@@ -8,6 +8,8 @@ import { addBrand, editBrand, toggleBrandStatus, viewAllBrand } from "../control
 import { addIngredient, editIngredient, toggleIngredientStatus, viewAllIngredient } from "../controllers/ingredient.controllers.js";
 import { addRecipe, editRecipe, toggleRecipeStatus, viewAllRecipe } from "../controllers/recipe.controllers.js";
 import { addPurchase, viewAllPurchase } from "../controllers/purchase.controllers.js";
+import uploadIngredient from "../config/ingredient.multer.js";
+import uploadRecipe from "../config/recipe.multer.js";
 
 const router = express.Router();
 
@@ -43,14 +45,14 @@ router.get("/viewAllBrand",viewAllBrand);
 router.patch("/toggleBrandStatus/:id",toggleBrandStatus);
 
 // Ingredients Routes
-router.post("/addIngredient",addIngredient);
-router.put("/editIngredient/:id",editIngredient);
+router.post("/addIngredient",uploadIngredient.single("image"),addIngredient);
+router.put("/editIngredient/:id",uploadIngredient.single("image"),editIngredient);
 router.get("/viewAllIngredient",viewAllIngredient);
 router.patch("/toggleIngredientStatus/:id",toggleIngredientStatus);
 
 // Recipe Routes
-router.post("/addRecipe",addRecipe);
-router.put("/editRecipe/:id",editRecipe);
+router.post("/addRecipe",uploadRecipe.single("image"),addRecipe);
+router.put("/editRecipe/:id",uploadRecipe.single("image"),editRecipe);
 router.get("/viewAllRecipe",viewAllRecipe);
 router.patch("/toggleRecipeStatus/:id",toggleRecipeStatus);
 
