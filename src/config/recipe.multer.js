@@ -6,7 +6,7 @@ const storage = multer.diskStorage({
 
         return cb(
             null,
-            "./uploads/recipes"
+            "./recipes"
         );
 
     },
