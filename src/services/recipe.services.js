@@ -9,205 +9,94 @@ import ingredients from "../models/ingredient.model.js";
 export const addRecipeService = async (data, imageUrl = null) => {
 
     const {
-
         recipeName,
         recipeItems,
         recipeCost,
         sellingPrice
-
     } = data;
 
-
-    const existingRecipe =
-        await recipes.findOne({
-
-            recipeName
-
-        });
+    const existingRecipe = await recipes.findOne({ recipeName });
 
     if (existingRecipe) {
-
-        throw new Error(
-            "Recipe already exists"
-        );
-
+        throw new Error("Recipe already exists");
     }
 
-
-    for (
-        const item
-        of recipeItems
-    ) {
-
-        const ingredient =
-            await ingredients.findById(
-                item.ingredientId
-            );
-
+    for (const item of recipeItems) {
+        const ingredient = await ingredients.findById(item.ingredientId);
         if (!ingredient) {
-
-            throw new Error(
-                "Ingredient not found"
-            );
-
+            throw new Error("Ingredient not found");
         }
-
     }
 
+    // IMPORTANT: Convert to numbers before comparing
+    const cost = Number(recipeCost);
+    const price = Number(sellingPrice);
 
-    if (
-
-        sellingPrice
-        <
-        recipeCost
-
-    ) {
-
-        throw new Error(
-
-            "Selling price cannot be less than recipe cost"
-
-        );
-
+    if (price <= cost) {
+        throw new Error("Selling price must be greater than recipe cost");
     }
-
 
     if (imageUrl) {
-
-        data.recipeImage =
-            imageUrl;
-
+        data.recipeImage = imageUrl;
     }
 
-
-    const recipe =
-        await recipes.create(
-            data
-        );
-
+    const recipe = await recipes.create(data);
     return recipe;
-
 };
-
-
-
 
 // EDIT RECIPE
 
-export const editRecipeService = async(id,data,imageUrl=null)=>{
+export const editRecipeService = async (id, data, imageUrl = null) => {
 
-    const currentRecipe =
-    await recipes.findById(
-        id
-    );
+    const currentRecipe = await recipes.findById(id);
 
-    if(!currentRecipe){
-
-        throw new Error(
-            "Recipe not found"
-        );
-
+    if (!currentRecipe) {
+        throw new Error("Recipe not found");
     }
-
 
     // Recipe name duplicate check
-    if(
-
-        data.recipeName &&
-
-        data.recipeName !==
-        currentRecipe.recipeName
-
-    ){
-
-        const existingRecipe =
-        await recipes.findOne({
-
-            recipeName:
-            data.recipeName
-
+    if (data.recipeName && data.recipeName !== currentRecipe.recipeName) {
+        const existingRecipe = await recipes.findOne({
+            recipeName: data.recipeName
         });
-
-        if(existingRecipe){
-
-            throw new Error(
-                "Recipe name already exists"
-            );
-
+        if (existingRecipe) {
+            throw new Error("Recipe name already exists");
         }
-
     }
-
 
     // Validate ingredients only if recipeItems exists
-    if(data.recipeItems){
-
-        for(
-            const item
-            of data.recipeItems
-        ){
-
-            const ingredient =
-            await ingredients.findById(
-                item.ingredientId
-            );
-
-            if(!ingredient){
-
-                throw new Error(
-                    "Ingredient not found"
-                );
-
+    if (data.recipeItems) {
+        for (const item of data.recipeItems) {
+            const ingredient = await ingredients.findById(item.ingredientId);
+            if (!ingredient) {
+                throw new Error("Ingredient not found");
             }
-
         }
-
     }
 
-
-    // Price validation only if values exist
-    if(
-
-        data.sellingPrice &&
-        data.recipeCost &&
-
-        Number(data.sellingPrice)
-        <
-        Number(data.recipeCost)
-
-    ){
-
-        throw new Error(
-
-            "Selling price cannot be less than recipe cost"
-
-        );
-
+    // Price validation - Convert to numbers
+    if (data.sellingPrice && data.recipeCost) {
+        const cost = Number(data.recipeCost);
+        const price = Number(data.sellingPrice);
+        
+        if (price <= cost) {
+            throw new Error("Selling price must be greater than recipe cost");
+        }
     }
-
 
     // Update image only
-    if(imageUrl){
-
-        data.recipeImage =
-        imageUrl;
-
+    if (imageUrl) {
+        data.recipeImage = imageUrl;
     }
 
-
-    const updatedRecipe =
-    await recipes.findByIdAndUpdate(
-
+    const updatedRecipe = await recipes.findByIdAndUpdate(
         id,
         data,
-        {new:true}
-
+        { new: true }
     );
 
     return updatedRecipe;
-
 };
-
 
 // VIEW ALL RECIPE
 
