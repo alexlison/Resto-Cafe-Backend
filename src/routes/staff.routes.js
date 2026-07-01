@@ -10,6 +10,7 @@ import { addRecipe, editRecipe, toggleRecipeStatus, viewAllRecipe } from "../con
 import { addPurchase, viewAllPurchase } from "../controllers/purchase.controllers.js";
 import uploadIngredient from "../config/ingredient.multer.js";
 import uploadRecipe from "../config/recipe.multer.js";
+import { getStockData } from "../controllers/stock.controllers.js";
 
 const router = express.Router();
 
@@ -59,6 +60,9 @@ router.patch("/toggleRecipeStatus/:id",toggleRecipeStatus);
 // Purchase Routes
 router.post("/addPurchase",addPurchase);
 router.get("/viewAllPurchase",viewAllPurchase);
+
+// Stock Management
+router.get("/viewStock", getStockData);
 
 
 export default router;
