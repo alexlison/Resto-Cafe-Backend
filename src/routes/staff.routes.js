@@ -10,7 +10,7 @@ import { addRecipe, editRecipe, toggleRecipeStatus, viewAllRecipe } from "../con
 import { addPurchase, viewAllPurchase } from "../controllers/purchase.controllers.js";
 import uploadIngredient from "../config/ingredient.multer.js";
 import uploadRecipe from "../config/recipe.multer.js";
-import { getStockData } from "../controllers/stock.controllers.js";
+import { getStockData, updateBatchStatus } from "../controllers/stock.controllers.js";
 import uploadSalesPDF from "../config/sales.multer.js";
 import { uploadSalesPDF as uploadSalesPDFController,viewAllSales,
     getSalesByDateRange,
@@ -69,6 +69,7 @@ router.get("/viewAllPurchase",viewAllPurchase);
 
 // Stock Management
 router.get("/viewStock", getStockData);
+router.patch("/updateBatchStatus", updateBatchStatus); 
 
 // Sales Management
 
