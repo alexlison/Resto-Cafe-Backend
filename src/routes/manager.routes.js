@@ -1,7 +1,7 @@
 import express from "express";
 import { authenticate } from "../middlewares/auth.middleware.js";
-import { isAdmin } from "../middlewares/admin.middleware.js";
-import { viewAllManagers, viewAllStaff } from "../controllers/admin.controllers.js";
+import { isManager } from "../middlewares/manger.middleware.js";
+import { viewAllStaff } from "../controllers/admin.controllers.js";
 import { viewAllCategory } from "../controllers/category.controllers.js";
 import { viewAllSubCategory } from "../controllers/subcategory.controllers.js";
 import { viewAllVendor } from "../controllers/vendor.controllers.js";
@@ -15,13 +15,12 @@ const router = express.Router();
 
 // middleware
 router.use(authenticate);
-router.use(isAdmin);
+router.use(isManager);
 
 //routes
 
 // views
 router.get("/viewAllStaff",viewAllStaff);
-router.get("/viewAllManagers",viewAllManagers);
 router.get("/viewAllCategory",viewAllCategory);
 router.get("/viewAllSubCategory",viewAllSubCategory);
 router.get("/viewAllVendor",viewAllVendor);
