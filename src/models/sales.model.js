@@ -66,6 +66,5 @@ const salesSchema = new mongoose.Schema(
   }
 );
 
-salesSchema.index({ salesDate: -1 });
 
 export default mongoose.model("sales", salesSchema);

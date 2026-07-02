@@ -80,8 +80,5 @@ const salesItemSchema = new mongoose.Schema(
   }
 );
 
-salesItemSchema.index({ salesId: 1 });
-salesItemSchema.index({ recipeId: 1 });
-salesItemSchema.index({ ingredientId: 1 });
 
 export default mongoose.model("salesitems", salesItemSchema);
