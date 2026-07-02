@@ -45,7 +45,16 @@ const purchaseBatchSchema = new mongoose.Schema(
     remainingQuantity: {
         type: Number,
         required: true
-    }
+    },
+    batchStatus:{
+    type:String,
+    enum:[
+        "ACTIVE",
+        "EMPTY",
+        "EXPIRED"
+    ],
+    default:"ACTIVE"
+}
 
 },
 {
