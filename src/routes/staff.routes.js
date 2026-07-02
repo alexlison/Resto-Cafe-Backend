@@ -11,6 +11,12 @@ import { addPurchase, viewAllPurchase } from "../controllers/purchase.controller
 import uploadIngredient from "../config/ingredient.multer.js";
 import uploadRecipe from "../config/recipe.multer.js";
 import { getStockData } from "../controllers/stock.controllers.js";
+import uploadSalesPDF from "../config/sales.multer.js";
+import { uploadSalesPDF as uploadSalesPDFController,viewAllSales,
+    getSalesByDateRange,
+  getSalesDetails,
+  getSalesSummary
+} from "../controllers/sales.controllers.js";
 
 const router = express.Router();
 
@@ -63,6 +69,15 @@ router.get("/viewAllPurchase",viewAllPurchase);
 
 // Stock Management
 router.get("/viewStock", getStockData);
+
+// Sales Management
+
+// Upload and process sales PDF
+router.post("/addSales",uploadSalesPDF.single("pdfFile"),uploadSalesPDFController);
+router.get("/viewAllSales", viewAllSales);
+router.get("/getSalesByDateRange", getSalesByDateRange);
+router.get("/getSalesDetails/:id", getSalesDetails);
+router.get("/getSalesSummary", getSalesSummary);
 
 
 export default router;
