@@ -17,6 +17,7 @@ import { uploadSalesPDF as uploadSalesPDFController,viewAllSales,
   getSalesDetails,
   getSalesSummary
 } from "../controllers/sales.controllers.js";
+import { getStaff, updateStaff } from "../controllers/staff.controllers.js";
 
 const router = express.Router();
 
@@ -70,6 +71,11 @@ router.get("/viewAllPurchase",viewAllPurchase);
 // Stock Management
 router.get("/viewStock", getStockData);
 router.patch("/updateBatchStatus", updateBatchStatus); 
+
+
+// Staff Management
+router.put("/updateStaff/:id", updateStaff);
+router.get("/staffProfile/:id", getStaff);
 
 // Sales Management
 
