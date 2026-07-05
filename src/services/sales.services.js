@@ -1,181 +1,456 @@
 import mongoose from "mongoose";
 import salesModel from "../models/sales.model.js";
 import salesItemModel from "../models/salesItem.model.js";
+import stockTransactionModel from "../models/stockTransaction.model.js";
 import recipesModel from "../models/recipe.model.js";
 import ingredientsModel from "../models/ingredient.model.js";
 import purchaseBatchModel from "../models/purchaseBatch.model.js";
 import { extractPDFText, parseSalesText, convertToDate } from "../utils/pdfParser.js";
 import fs from "fs";
 
-/**
- * Process uploaded sales PDF
- */
-export const processSalesPDF = async (file, userId) => {
+// ============================================
+// Helper Functions
+// ============================================
+
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const normalizeName = (str) =>
+  str.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+
+const levenshteinDistance = (a, b) => {
+  const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      if (a[i - 1] === b[j - 1]) dp[i][j] = dp[i - 1][j - 1];
+      else dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
+};
+
+const similarityRatio = (a, b) => {
+  const an = normalizeName(a);
+  const bn = normalizeName(b);
+  const maxLen = Math.max(an.length, bn.length);
+  if (maxLen === 0) return 1;
+  return 1 - levenshteinDistance(an, bn) / maxLen;
+};
+
+const FUZZY_MATCH_THRESHOLD = 0.78;
+
+const WEIGHT_TO_GRAMS = { mg: 0.001, g: 1, kg: 1000 };
+const VOLUME_TO_ML = { ml: 1, ltr: 1000 };
+
+const convertQuantity = (qty, fromUnit, toUnit) => {
+  if (fromUnit === toUnit) return qty;
+  if (fromUnit in WEIGHT_TO_GRAMS && toUnit in WEIGHT_TO_GRAMS) {
+    return (qty * WEIGHT_TO_GRAMS[fromUnit]) / WEIGHT_TO_GRAMS[toUnit];
+  }
+  if (fromUnit in VOLUME_TO_ML && toUnit in VOLUME_TO_ML) {
+    return (qty * VOLUME_TO_ML[fromUnit]) / VOLUME_TO_ML[toUnit];
+  }
+  return qty;
+};
+
+const inferLegacyBaseUnit = (ingredientUnit) => {
+  if (ingredientUnit === "kg" || ingredientUnit === "g") return "g";
+  if (ingredientUnit === "ltr" || ingredientUnit === "ml") return "ml";
+  return ingredientUnit;
+};
+
+const convertRecipeQtyToStockUnit = (recipeQty, recipeItemUnit, ingredientUnit) => {
+  const fromUnit = recipeItemUnit || inferLegacyBaseUnit(ingredientUnit);
+  return convertQuantity(recipeQty, fromUnit, ingredientUnit);
+};
+
+// ============================================
+// Normalize PDF file Path
+// ============================================
+
+const normalizeFilePath = (filePath) => {
+  return filePath.replace(/\\/g, "/");
+};
+
+// ============================================
+// Recipe Matching
+// ============================================
+
+export const findRecipeMatch = async (itemName) => {
+  if (!itemName) return null;
+
+  const name = itemName.trim();
+  const safeName = escapeRegex(name);
+
+  // Exact match
+  let recipe = await recipesModel.findOne({
+    recipeName: { $regex: new RegExp(`^${safeName}$`, 'i') },
+    isActive: true
+  });
+  if (recipe) return recipe;
+
+  // Partial match
+  recipe = await recipesModel.findOne({
+    recipeName: { $regex: safeName, $options: 'i' },
+    isActive: true
+  });
+  if (recipe) return recipe;
+
+  // Variations
+  const variations = [
+    name.replace(/\([^)]*\)/g, '').trim(),
+    name.replace(/\s*(Classic|Large|Medium|Small|Regular|Special|Premium|Deluxe).*$/i, '').trim(),
+    name.replace(/^(Crispy|Loaded|Spicy|Cheesy|Grilled|Fried|Baked|Roasted)\s*/i, '').trim()
+  ];
+
+  for (const variant of variations) {
+    if (variant && variant !== name) {
+      recipe = await recipesModel.findOne({
+        recipeName: { $regex: escapeRegex(variant), $options: 'i' },
+        isActive: true
+      });
+      if (recipe) return recipe;
+    }
+  }
+
+  // Fuzzy fallback
+  const activeRecipes = await recipesModel.find({ isActive: true });
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const candidate of activeRecipes) {
+    const score = similarityRatio(name, candidate.recipeName);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = candidate;
+    }
+  }
+
+  if (bestMatch && bestScore >= FUZZY_MATCH_THRESHOLD) {
+    console.warn(`Fuzzy-matched "${name}" to "${bestMatch.recipeName}" (${bestScore.toFixed(2)})`);
+    return bestMatch;
+  }
+
+  return null;
+};
+
+// ============================================
+// Get All Ingredients for a Recipe
+// ============================================
+
+export const getRecipeIngredients = async (recipeId) => {
+  const recipe = await recipesModel.findById(recipeId).populate('recipeItems.ingredientId');
+  if (!recipe) return [];
+  
+  const ingredients = [];
+  for (const item of recipe.recipeItems) {
+    if (item.ingredientId) {
+      ingredients.push({
+        ingredientId: item.ingredientId._id,
+        ingredientName: item.ingredientId.ingredientName,
+        unit: item.ingredientId.unit,
+        quantity: item.quantity,
+        recipeItemUnit: item.unit || inferLegacyBaseUnit(item.ingredientId.unit),
+        costPrice: item.ingredientId.costPrice
+      });
+    }
+  }
+  return ingredients;
+};
+
+// ============================================
+// Stock Validation
+// ============================================
+
+export const validateStock = async (recipe, quantity, session = null) => {
+  for (const item of recipe.recipeItems) {
+    const recipeQtyNeeded = item.quantity * quantity;
+    if (recipeQtyNeeded <= 0) continue;
+
+    const ingredient = await ingredientsModel.findById(item.ingredientId).session(session);
+    if (!ingredient) throw new Error(`Ingredient not found: ${item.ingredientId}`);
+
+    const required = convertRecipeQtyToStockUnit(recipeQtyNeeded, item.unit, ingredient.unit);
+
+    const batches = await purchaseBatchModel.find({
+      ingredientId: item.ingredientId,
+      batchStatus: "ACTIVE",
+      remainingQuantity: { $gt: 0 },
+      expiryDate: { $gt: new Date() }
+    }).sort({ expiryDate: 1 }).session(session);
+
+    const totalAvailable = batches.reduce((sum, b) => sum + b.remainingQuantity, 0);
+    if (totalAvailable < required) {
+      throw new Error(`Insufficient stock: ${ingredient.ingredientName}. Required: ${required} ${ingredient.unit}, Available: ${totalAvailable} ${ingredient.unit}`);
+    }
+  }
+};
+
+// ============================================
+// FIFO Stock Reduction
+// ============================================
+
+export const reduceStockFIFO = async (recipeId, quantity, salesId, salesItemId, session) => {
+  const recipe = await recipesModel.findById(recipeId).session(session);
+  if (!recipe) throw new Error(`Recipe not found: ${recipeId}`);
+
+  for (const item of recipe.recipeItems) {
+    const recipeQtyNeeded = item.quantity * quantity;
+    if (recipeQtyNeeded <= 0) continue;
+
+    const ingredient = await ingredientsModel.findById(item.ingredientId).session(session);
+    if (!ingredient) throw new Error(`Ingredient not found: ${item.ingredientId}`);
+
+    const required = convertRecipeQtyToStockUnit(recipeQtyNeeded, item.unit, ingredient.unit);
+
+    const batches = await purchaseBatchModel.find({
+      ingredientId: item.ingredientId,
+      batchStatus: "ACTIVE",
+      remainingQuantity: { $gt: 0 },
+      expiryDate: { $gt: new Date() }
+    }).sort({ expiryDate: 1, createdAt: 1 }).session(session);
+
+    let remaining = required;
+    for (const batch of batches) {
+      if (remaining <= 0) break;
+
+      const consume = Math.min(batch.remainingQuantity, remaining);
+      batch.remainingQuantity -= consume;
+      batch.batchStatus = batch.remainingQuantity <= 0 ? "EMPTY" : batch.batchStatus;
+      if (batch.expiryDate && new Date() > batch.expiryDate) batch.batchStatus = "EXPIRED";
+      await batch.save({ session });
+
+      const transaction = new stockTransactionModel({
+        ingredientId: item.ingredientId,
+        batchId: batch._id,
+        salesId,
+        salesItemId,
+        quantity: consume,
+        type: "SALE",
+        description: `Consumed for: ${recipe.recipeName}`
+      });
+      await transaction.save({ session });
+
+      remaining -= consume;
+    }
+
+    if (remaining > 0) {
+      throw new Error(`Failed to consume stock: ${ingredient.ingredientName}. Remaining: ${remaining} ${ingredient.unit}`);
+    }
+  }
+};
+
+// ============================================
+// Preview Sales PDF
+// ============================================
+
+export const previewSalesPDF = async (file) => {
+  try {
+    const filePath = normalizeFilePath(file.path);
+    const fileName = file.filename;
+
+    const pdfText = await extractPDFText(file.path);
+    if (!pdfText) throw new Error("Failed to extract text from PDF");
+
+    const parsedData = parseSalesText(pdfText);
+    if (!parsedData.salesDate) throw new Error("Sales date not found in PDF");
+
+    const salesDate = convertToDate(parsedData.salesDate);
+    if (!salesDate) throw new Error(`Invalid sales date: ${parsedData.salesDate}`);
+
+    const previewItems = [];
+    let totalGross = 0, totalDiscount = 0, totalTax = 0, totalNet = 0, totalCost = 0, totalProfit = 0;
+
+    for (const item of parsedData.items) {
+      if (item.quantity <= 0 || item.rate <= 0) continue;
+
+      const recipe = await findRecipeMatch(item.itemName);
+      
+      let recipeFound = !!recipe;
+      let ingredientList = [];
+      let stockAvailable = false;
+      let stockDetails = null;
+
+      if (recipe) {
+        if (recipe.isActive && recipe.recipeItems?.length) {
+          ingredientList = await getRecipeIngredients(recipe._id);
+          
+          if (ingredientList.length > 0) {
+            try {
+              await validateStock(recipe, item.quantity);
+              stockAvailable = true;
+            } catch (stockError) {
+              stockAvailable = false;
+              stockDetails = stockError.message;
+            }
+          }
+        }
+      }
+
+      let gross = 0, net = 0, cost = 0, profit = 0;
+      if (recipe && ingredientList.length > 0) {
+        gross = recipe.sellingPrice * item.quantity;
+        net = gross - (item.discount || 0) + (item.tax || 0);
+        cost = recipe.recipeCost * item.quantity;
+        profit = net - cost;
+      }
+
+      previewItems.push({
+        pdfItemName: item.itemName,
+        quantity: item.quantity,
+        pdfRate: item.rate,
+        pdfTotal: item.total,
+        tax: item.tax || 0,
+        discount: item.discount || 0,
+        saleAmount: item.saleAmount || item.total,
+        recipeFound,
+        recipeId: recipe?._id || null,
+        recipeName: recipe?.recipeName || null,
+        recipeCost: recipe?.recipeCost || null,
+        sellingPrice: recipe?.sellingPrice || null,
+        ingredients: ingredientList,
+        grossRevenue: gross,
+        netRevenue: net,
+        costAmount: cost,
+        profit: profit,
+        stockAvailable,
+        stockDetails,
+        isManual: false
+      });
+
+      if (recipe && ingredientList.length > 0) {
+        totalGross += gross;
+        totalDiscount += item.discount || 0;
+        totalTax += item.tax || 0;
+        totalNet += net;
+        totalCost += cost;
+        totalProfit += profit;
+      }
+    }
+
+    return {
+      salesDate: salesDate,
+      salesDateString: parsedData.salesDate,
+      items: previewItems,
+      totalGrossRevenue: Math.round(totalGross),
+      totalDiscount: Math.round(totalDiscount),
+      totalTax: Math.round(totalTax),
+      totalNetRevenue: Math.round(totalNet),
+      totalCost: Math.round(totalCost),
+      totalProfit: Math.round(totalProfit),
+      totalItems: previewItems.length,
+      validItems: previewItems.filter(i => i.recipeFound && i.stockAvailable).length,
+      invalidItems: previewItems.filter(i => !i.recipeFound || !i.stockAvailable).length,
+      pdfFileName: fileName,
+      pdfFilePath: filePath
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
+// ============================================
+// Approve Sales PDF
+// ============================================
+
+export const approveSalesPDF = async (file, userId, manualItems = []) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const filePath = file.path;
+    const filePath = normalizeFilePath(file.path);
     const fileName = file.filename;
 
-    console.log("=== Processing Sales PDF ===");
-    console.log("File:", fileName);
-    console.log("File path:", filePath);
+    const pdfText = await extractPDFText(file.path);
+    if (!pdfText) throw new Error("Failed to extract text from PDF");
 
-    // Step 1: Extract text from PDF
-    const pdfText = await extractPDFText(filePath);
-    if (!pdfText) {
-      throw new Error("Failed to extract text from PDF");
-    }
-
-    // Write extracted text to file for debugging
-    try {
-      fs.writeFileSync('./debug_extracted_text.txt', pdfText);
-      console.log("Extracted text written to debug_extracted_text.txt");
-    } catch (err) {
-      console.log("Could not write debug file:", err.message);
-    }
-
-    console.log("PDF Text extracted, length:", pdfText.length);
-
-    // Step 2: Parse sales data
     const parsedData = parseSalesText(pdfText);
-    console.log("Parsed sales date:", parsedData.salesDate);
-    console.log("Parsed items count:", parsedData.items?.length || 0);
-
-    if (!parsedData.salesDate) {
-      throw new Error("Sales date not found in PDF");
-    }
+    if (!parsedData.salesDate) throw new Error("Sales date not found in PDF");
 
     const salesDate = convertToDate(parsedData.salesDate);
-    if (!salesDate) {
-      throw new Error(`Invalid sales date format: ${parsedData.salesDate}`);
-    }
+    if (!salesDate) throw new Error(`Invalid sales date: ${parsedData.salesDate}`);
 
-    console.log("Converted sales date:", salesDate);
+    // Check duplicate
+    const existing = await salesModel.findOne({ salesDate }).session(session);
+    if (existing) throw new Error(`Sales already exists for date: ${parsedData.salesDate}`);
 
-    // Step 3: Check for duplicate upload
-    const existingSales = await salesModel.findOne({ salesDate: salesDate }).session(session);
-    if (existingSales) {
-      throw new Error(`Sales data already exists for date: ${parsedData.salesDate}`);
-    }
-
-    // Step 4: Validate all items before processing
+    // Process items - combine PDF items with manual items
+    const allItems = [...parsedData.items, ...manualItems];
     const validatedItems = [];
-    let totalGrossRevenue = 0;
-    let totalDiscount = 0;
-    let totalTax = 0;
-    let totalNetRevenue = 0;
-    let totalCost = 0;
-    let totalProfit = 0;
+    let totalGross = 0, totalDiscount = 0, totalTax = 0, totalNet = 0, totalCost = 0, totalProfit = 0;
 
-    for (const item of parsedData.items) {
-      // Skip invalid items
-      if (item.quantity <= 0 || item.rate <= 0) {
-        console.log("Skipping invalid item:", item);
-        continue;
+    for (const item of allItems) {
+      if (item.quantity <= 0) continue;
+
+      let recipe;
+      if (item.recipeId) {
+        recipe = await recipesModel.findById(item.recipeId).session(session);
+      } else {
+        recipe = await findRecipeMatch(item.itemName);
       }
 
-      console.log("Processing item:", item.itemName);
+      if (!recipe) throw new Error(`Recipe not found for: ${item.itemName}`);
+      if (!recipe.isActive) throw new Error(`Recipe inactive: ${recipe.recipeName}`);
+      if (!recipe.recipeItems?.length) throw new Error(`Recipe has no ingredients: ${recipe.recipeName}`);
 
-      // Find recipe match
-      const recipe = await findRecipeMatch(item.itemName);
-      if (!recipe) {
-        throw new Error(`Recipe not found for item: ${item.itemName}`);
-      }
+      // Validate stock
+      await validateStock(recipe, item.quantity, session);
 
-      console.log("Found recipe:", recipe.recipeName);
-
-      // Check if recipe is active
-      if (!recipe.isActive) {
-        throw new Error(`Recipe is inactive: ${recipe.recipeName}`);
-      }
-
-      // Check if recipe has ingredients
-      if (!recipe.recipeItems || recipe.recipeItems.length === 0) {
-        throw new Error(`Recipe has no ingredients: ${recipe.recipeName}`);
-      }
-
-      // Get the first ingredient from recipe (for main ingredient reference)
-      const firstIngredient = recipe.recipeItems[0];
-      const ingredient = await ingredientsModel.findById(firstIngredient.ingredientId).session(session);
-      if (!ingredient) {
-        throw new Error(`Ingredient not found for recipe: ${recipe.recipeName}`);
-      }
-
-      // Check if ingredient is active
-      if (!ingredient.isActive) {
-        throw new Error(`Ingredient is inactive: ${ingredient.ingredientName}`);
-      }
-
-      console.log("Found ingredient:", ingredient.ingredientName);
-
-      // Validate stock availability for all ingredients in recipe
-      await validateStockForRecipe(recipe, item.quantity, session);
-
-      // Calculate values
-      const grossRevenue = recipe.sellingPrice * item.quantity;
-      const netRevenue = grossRevenue - item.discount + item.tax;
-      const costAmount = recipe.recipeCost * item.quantity;
-      const profit = netRevenue - costAmount;
+      // Use RECIPE selling price and cost
+      const gross = recipe.sellingPrice * item.quantity;
+      const net = gross - (item.discount || 0) + (item.tax || 0);
+      const cost = recipe.recipeCost * item.quantity;
+      const profit = net - cost;
 
       validatedItems.push({
         recipeId: recipe._id,
-        ingredientId: ingredient._id,
         quantity: item.quantity,
-        pdfRate: item.rate,
-        pdfTotal: item.total,
-        taxAmount: item.tax,
-        discountAmount: item.discount,
-        saleAmount: item.saleAmount,
-        grossRevenue: grossRevenue,
-        netRevenue: netRevenue,
-        costAmount: costAmount,
+        pdfRate: item.rate || recipe.sellingPrice,
+        pdfTotal: item.total || gross,
+        taxAmount: item.tax || 0,
+        discountAmount: item.discount || 0,
+        saleAmount: net,
+        grossRevenue: gross,
+        netRevenue: net,
+        costAmount: cost,
         profit: profit,
         pdfItemName: item.itemName
       });
 
-      totalGrossRevenue += grossRevenue;
-      totalDiscount += item.discount;
-      totalTax += item.tax;
-      totalNetRevenue += netRevenue;
-      totalCost += costAmount;
+      totalGross += gross;
+      totalDiscount += item.discount || 0;
+      totalTax += item.tax || 0;
+      totalNet += net;
+      totalCost += cost;
       totalProfit += profit;
     }
 
     if (validatedItems.length === 0) {
-      throw new Error("No valid items found in PDF. Please check the PDF format.");
+      throw new Error("No valid items found");
     }
 
-    console.log("Validated items count:", validatedItems.length);
-
-    // Step 5: Create Sales record
-    const salesData = {
-      salesDate: salesDate,
+    // Create sales record
+    const sales = new salesModel({
+      salesDate,
       pdfFileName: fileName,
       pdfFilePath: filePath,
-      totalGrossRevenue: Math.round(totalGrossRevenue),
+      totalGrossRevenue: Math.round(totalGross),
       totalDiscount: Math.round(totalDiscount),
       totalTax: Math.round(totalTax),
-      totalNetRevenue: Math.round(totalNetRevenue),
+      totalNetRevenue: Math.round(totalNet),
       totalCost: Math.round(totalCost),
       totalProfit: Math.round(totalProfit),
       totalItems: validatedItems.length,
       processedBy: userId
-    };
-
-    const sales = new salesModel(salesData);
+    });
     await sales.save({ session });
 
-    console.log("Sales record created:", sales._id);
-
-    // Step 6: Create Sales Items and Reduce Stock
+    // Create sales items and reduce stock
     for (const item of validatedItems) {
-      // Create sales item
-      const salesItemData = {
+      const salesItem = new salesItemModel({
         salesId: sales._id,
         recipeId: item.recipeId,
-        ingredientId: item.ingredientId,
         quantity: item.quantity,
         pdfRate: item.pdfRate,
         pdfTotal: item.pdfTotal,
@@ -187,306 +462,179 @@ export const processSalesPDF = async (file, userId) => {
         costAmount: item.costAmount,
         profit: item.profit,
         pdfItemName: item.pdfItemName
-      };
-
-      const salesItem = new salesItemModel(salesItemData);
+      });
       await salesItem.save({ session });
 
-      console.log("Sales item created for:", item.pdfItemName);
-
-      // Reduce stock for all ingredients in recipe
-      await reduceStockForRecipe(
-        item.recipeId,
-        item.quantity,
-        sales._id,
-        salesItem._id,
-        session
-      );
+      // Reduce stock using FIFO
+      await reduceStockFIFO(item.recipeId, item.quantity, sales._id, salesItem._id, session);
     }
 
-    // Step 7: Commit transaction
     await session.commitTransaction();
     session.endSession();
 
-    console.log("Sales transaction committed successfully");
-
-    // Delete PDF file after successful processing
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        console.log("PDF file deleted:", filePath);
-      }
-    } catch (err) {
-      console.error("Error deleting PDF file:", err);
-    }
-
-    return {
-      sales: sales,
-      items: validatedItems.length,
-      message: "Sales data processed successfully"
-    };
-
+    return { sales, items: validatedItems.length };
   } catch (error) {
-    console.error("Error processing sales PDF:", error.message);
-
-    // Rollback transaction
     await session.abortTransaction();
     session.endSession();
-
-    // Delete PDF file if exists
-    try {
-      if (file && file.path && fs.existsSync(file.path)) {
-        fs.unlinkSync(file.path);
-        console.log("Deleted PDF file after error:", file.path);
-      }
-    } catch (err) {
-      console.error("Error deleting PDF file:", err);
-    }
-
     throw error;
   }
 };
 
-/**
- * Find recipe match by item name
- */
-export const findRecipeMatch = async (itemName) => {
-  if (!itemName) return null;
+// ============================================
+// Add Manual Sales
+// ============================================
 
-  // Clean item name for better matching
-  const cleanItemName = itemName.trim();
+export const addManualSales = async (salesDateStr, items, userId) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  // Try exact match first (case insensitive)
-  let recipe = await recipesModel.findOne({
-    recipeName: { $regex: new RegExp(`^${escapeRegex(cleanItemName)}$`, 'i') },
-    isActive: true
-  });
+  try {
+    const salesDate = convertToDate(salesDateStr);
+    if (!salesDate) throw new Error(`Invalid sales date: ${salesDateStr}`);
 
-  if (recipe) return recipe;
+    // Check duplicate
+    const existing = await salesModel.findOne({ salesDate }).session(session);
+    if (existing) throw new Error(`Sales already exists for date: ${salesDateStr}`);
 
-  // Try partial match (contains)
-  recipe = await recipesModel.findOne({
-    recipeName: { $regex: escapeRegex(cleanItemName), $options: 'i' },
-    isActive: true
-  });
+    // Process items
+    const validatedItems = [];
+    let totalGross = 0, totalDiscount = 0, totalTax = 0, totalNet = 0, totalCost = 0, totalProfit = 0;
 
-  if (recipe) return recipe;
+    for (const item of items) {
+      let recipe;
+      if (item.recipeId) {
+        recipe = await recipesModel.findById(item.recipeId).session(session);
+      } else {
+        recipe = await findRecipeMatch(item.itemName);
+      }
 
-  // Try removing common words/suffixes
-  const variations = generateNameVariations(cleanItemName);
-  for (const variation of variations) {
-    recipe = await recipesModel.findOne({
-      recipeName: { $regex: escapeRegex(variation), $options: 'i' },
-      isActive: true
+      if (!recipe) throw new Error(`Recipe not found for: ${item.itemName}`);
+      if (!recipe.isActive) throw new Error(`Recipe inactive: ${recipe.recipeName}`);
+      if (!recipe.recipeItems?.length) throw new Error(`Recipe has no ingredients: ${recipe.recipeName}`);
+
+      // Validate stock
+      await validateStock(recipe, item.quantity, session);
+
+      // Use RECIPE selling price and cost
+      const gross = recipe.sellingPrice * item.quantity;
+      const net = gross - (item.discount || 0) + (item.tax || 0);
+      const cost = recipe.recipeCost * item.quantity;
+      const profit = net - cost;
+
+      validatedItems.push({
+        recipeId: recipe._id,
+        quantity: item.quantity,
+        pdfRate: item.rate || recipe.sellingPrice,
+        pdfTotal: gross,
+        taxAmount: item.tax || 0,
+        discountAmount: item.discount || 0,
+        saleAmount: net,
+        grossRevenue: gross,
+        netRevenue: net,
+        costAmount: cost,
+        profit: profit,
+        pdfItemName: item.itemName
+      });
+
+      totalGross += gross;
+      totalDiscount += item.discount || 0;
+      totalTax += item.tax || 0;
+      totalNet += net;
+      totalCost += cost;
+      totalProfit += profit;
+    }
+
+    // Create sales record
+    const sales = new salesModel({
+      salesDate,
+      pdfFileName: `manual_${Date.now()}`,
+      pdfFilePath: `manual_${Date.now()}`,
+      totalGrossRevenue: Math.round(totalGross),
+      totalDiscount: Math.round(totalDiscount),
+      totalTax: Math.round(totalTax),
+      totalNetRevenue: Math.round(totalNet),
+      totalCost: Math.round(totalCost),
+      totalProfit: Math.round(totalProfit),
+      totalItems: validatedItems.length,
+      processedBy: userId
     });
-    if (recipe) return recipe;
-  }
+    await sales.save({ session });
 
-  return null;
-};
+    // Create sales items and reduce stock
+    for (const item of validatedItems) {
+      const salesItem = new salesItemModel({
+        salesId: sales._id,
+        recipeId: item.recipeId,
+        quantity: item.quantity,
+        pdfRate: item.pdfRate,
+        pdfTotal: item.pdfTotal,
+        taxAmount: item.taxAmount,
+        discountAmount: item.discountAmount,
+        saleAmount: item.saleAmount,
+        grossRevenue: item.grossRevenue,
+        netRevenue: item.netRevenue,
+        costAmount: item.costAmount,
+        profit: item.profit,
+        pdfItemName: item.pdfItemName
+      });
+      await salesItem.save({ session });
 
-/**
- * Escape regex special characters
- */
-const escapeRegex = (text) => {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-};
-
-/**
- * Generate variations of item name for matching
- */
-const generateNameVariations = (name) => {
-  const variations = [];
-
-  // Remove everything in parentheses
-  let cleaned = name.replace(/\([^)]*\)/g, '').trim();
-  if (cleaned !== name) variations.push(cleaned);
-
-  // Remove common suffixes
-  cleaned = name.replace(/\s*(Classic|Large|Medium|Small|Regular|Special|Premium|Deluxe|Single|Double|Triple|Mini|Maxi|With.*?)$/i, '').trim();
-  if (cleaned !== name) variations.push(cleaned);
-
-  // Remove common prefixes
-  cleaned = name.replace(/^(Crispy|Loaded|Spicy|Cheesy|Grilled|Fried|Baked|Roasted|Tender|Creamy)\s*/i, '').trim();
-  if (cleaned !== name) variations.push(cleaned);
-
-  // Remove both prefix and suffix
-  const withoutPrefix = name.replace(/^(Crispy|Loaded|Spicy|Cheesy|Grilled|Fried|Baked|Roasted|Tender|Creamy)\s*/i, '').trim();
-  const withoutBoth = withoutPrefix.replace(/\s*(Classic|Large|Medium|Small|Regular|Special|Premium|Deluxe|Single|Double|Triple|Mini|Maxi|With.*?)$/i, '').trim();
-  if (withoutBoth !== name && withoutBoth !== cleaned) variations.push(withoutBoth);
-
-  return variations;
-};
-
-/**
- * Validate stock availability for all ingredients in a recipe
- */
-export const validateStockForRecipe = async (recipe, quantity, session) => {
-  for (const recipeItem of recipe.recipeItems) {
-    const ingredientId = recipeItem.ingredientId;
-    const requiredQuantity = recipeItem.quantity * quantity;
-
-    if (requiredQuantity <= 0) continue;
-
-    // Get active batches for this ingredient (FIFO order by expiry date)
-    const batches = await purchaseBatchModel.find({
-      ingredientId: ingredientId,
-      batchStatus: "ACTIVE",
-      remainingQuantity: { $gt: 0 },
-      expiryDate: { $gt: new Date() } // Not expired
-    })
-      .sort({ expiryDate: 1, createdAt: 1 })
-      .session(session);
-
-    if (batches.length === 0) {
-      const ingredient = await ingredientsModel.findById(ingredientId).session(session);
-      throw new Error(`No stock available for ingredient: ${ingredient?.ingredientName || 'Unknown'}`);
+      // Reduce stock using FIFO
+      await reduceStockFIFO(item.recipeId, item.quantity, sales._id, salesItem._id, session);
     }
 
-    let totalAvailable = 0;
-    for (const batch of batches) {
-      totalAvailable += batch.remainingQuantity;
-    }
+    await session.commitTransaction();
+    session.endSession();
 
-    if (totalAvailable < requiredQuantity) {
-      const ingredient = await ingredientsModel.findById(ingredientId).session(session);
-      throw new Error(
-        `Insufficient stock for ingredient: ${ingredient?.ingredientName || 'Unknown'}. ` +
-        `Required: ${requiredQuantity}, Available: ${totalAvailable}`
-      );
-    }
+    return { sales, items: validatedItems.length };
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
   }
 };
 
-/**
- * Reduce stock for all ingredients in a recipe using FIFO
- */
-export const reduceStockForRecipe = async (recipeId, quantity, salesId, salesItemId, session) => {
-  const recipe = await recipesModel.findById(recipeId).session(session);
-  if (!recipe) {
-    throw new Error(`Recipe not found: ${recipeId}`);
-  }
+// ============================================
+// Get All Sales
+// ============================================
 
-  for (const recipeItem of recipe.recipeItems) {
-    const ingredientId = recipeItem.ingredientId;
-    const requiredQuantity = recipeItem.quantity * quantity;
-
-    if (requiredQuantity <= 0) continue;
-
-    // Get active batches for this ingredient (FIFO order by expiry date)
-    const batches = await purchaseBatchModel.find({
-      ingredientId: ingredientId,
-      batchStatus: "ACTIVE",
-      remainingQuantity: { $gt: 0 },
-      expiryDate: { $gt: new Date() } // Not expired
-    })
-      .sort({ expiryDate: 1, createdAt: 1 })
-      .session(session);
-
-    if (batches.length === 0) {
-      const ingredient = await ingredientsModel.findById(ingredientId).session(session);
-      throw new Error(`No stock available for ingredient: ${ingredient?.ingredientName || 'Unknown'}`);
-    }
-
-    let remainingToConsume = requiredQuantity;
-
-    for (const batch of batches) {
-      if (remainingToConsume <= 0) break;
-
-      const previousRemaining = batch.remainingQuantity;
-      const consumeQuantity = Math.min(batch.remainingQuantity, remainingToConsume);
-
-      // Update batch
-      batch.remainingQuantity -= consumeQuantity;
-
-      // Update batch status
-      if (batch.remainingQuantity <= 0) {
-        batch.batchStatus = "EMPTY";
-      }
-
-      // Check if expired
-      if (batch.expiryDate && new Date() > batch.expiryDate) {
-        batch.batchStatus = "EXPIRED";
-      }
-
-      await batch.save({ session });
-
-      remainingToConsume -= consumeQuantity;
-    }
-
-    if (remainingToConsume > 0) {
-      const ingredient = await ingredientsModel.findById(ingredientId).session(session);
-      throw new Error(
-        `Failed to consume stock for ingredient: ${ingredient?.ingredientName || 'Unknown'}. ` +
-        `Remaining to consume: ${remainingToConsume}`
-      );
-    }
-  }
-};
-
-/**
- * Get all sales records with pagination
- */
 export const getAllSales = async (page = 1, limit = 10) => {
   const skip = (page - 1) * limit;
-
   const sales = await salesModel.find()
     .sort({ salesDate: -1 })
     .skip(skip)
     .limit(limit)
     .populate("processedBy", "staff.name staff.email");
-
   const total = await salesModel.countDocuments();
-
-  return {
-    sales: sales,
-    total: total,
-    page: page,
-    limit: limit,
-    totalPages: Math.ceil(total / limit)
-  };
+  return { sales, total, page, limit, totalPages: Math.ceil(total / limit) };
 };
 
-/**
- * Get sales by date range
- */
+// ============================================
+// Get Sales by Date Range
+// ============================================
+
 export const getSalesByDateRange = async (fromDate, toDate) => {
-  const sales = await salesModel.find({
-    salesDate: {
-      $gte: new Date(fromDate),
-      $lte: new Date(toDate)
-    }
-  })
-    .sort({ salesDate: -1 })
-    .populate("processedBy", "staff.name staff.email");
-
-  return sales;
+  return await salesModel.find({
+    salesDate: { $gte: new Date(fromDate), $lte: new Date(toDate) }
+  }).sort({ salesDate: -1 }).populate("processedBy", "staff.name staff.email");
 };
 
-/**
- * Get sales details with items
- */
+// ============================================
+// Get Sales Details
+// ============================================
+
 export const getSalesDetails = async (salesId) => {
-  const sales = await salesModel.findById(salesId)
-    .populate("processedBy", "staff.name staff.email");
-
-  if (!sales) {
-    throw new Error("Sales record not found");
-  }
-
-  const items = await salesItemModel.find({ salesId: salesId })
-    .populate("recipeId", "recipeName sellingPrice recipeCost")
-    .populate("ingredientId", "ingredientName unit");
-
-  return {
-    sales: sales,
-    items: items
-  };
+  const sales = await salesModel.findById(salesId).populate("processedBy", "staff.name staff.email");
+  if (!sales) throw new Error("Sales record not found");
+  const items = await salesItemModel.find({ salesId })
+    .populate("recipeId", "recipeName sellingPrice recipeCost");
+  return { sales, items };
 };
 
-/**
- * Get sales summary for dashboard
- */
+// ============================================
+// Get Sales Summary
+// ============================================
+
 export const getSalesSummary = async () => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -497,119 +645,32 @@ export const getSalesSummary = async () => {
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
   const [todaySales, weekSales, monthSales, topProducts] = await Promise.all([
-    // Today's sales
     salesModel.aggregate([
       { $match: { salesDate: { $gte: today } } },
-      {
-        $group: {
-          _id: null,
-          totalNetRevenue: { $sum: "$totalNetRevenue" },
-          totalProfit: { $sum: "$totalProfit" },
-          totalItems: { $sum: "$totalItems" }
-        }
-      }
+      { $group: { _id: null, revenue: { $sum: "$totalNetRevenue" }, profit: { $sum: "$totalProfit" }, items: { $sum: "$totalItems" } } }
     ]),
-
-    // Week sales
     salesModel.aggregate([
       { $match: { salesDate: { $gte: startOfWeek } } },
-      {
-        $group: {
-          _id: null,
-          totalNetRevenue: { $sum: "$totalNetRevenue" },
-          totalProfit: { $sum: "$totalProfit" }
-        }
-      }
+      { $group: { _id: null, revenue: { $sum: "$totalNetRevenue" }, profit: { $sum: "$totalProfit" } } }
     ]),
-
-    // Month sales
     salesModel.aggregate([
       { $match: { salesDate: { $gte: startOfMonth } } },
-      {
-        $group: {
-          _id: null,
-          totalNetRevenue: { $sum: "$totalNetRevenue" },
-          totalProfit: { $sum: "$totalProfit" }
-        }
-      }
+      { $group: { _id: null, revenue: { $sum: "$totalNetRevenue" }, profit: { $sum: "$totalProfit" } } }
     ]),
-
-    // Top 5 selling products
     salesItemModel.aggregate([
-      {
-        $group: {
-          _id: "$recipeId",
-          totalQuantity: { $sum: "$quantity" },
-          totalRevenue: { $sum: "$grossRevenue" }
-        }
-      },
-      { $sort: { totalQuantity: -1 } },
+      { $group: { _id: "$recipeId", quantity: { $sum: "$quantity" }, revenue: { $sum: "$grossRevenue" } } },
+      { $sort: { quantity: -1 } },
       { $limit: 5 },
-      {
-        $lookup: {
-          from: "recipes",
-          localField: "_id",
-          foreignField: "_id",
-          as: "recipe"
-        }
-      },
+      { $lookup: { from: "recipes", localField: "_id", foreignField: "_id", as: "recipe" } },
       { $unwind: "$recipe" },
-      {
-        $project: {
-          recipeName: "$recipe.recipeName",
-          totalQuantity: 1,
-          totalRevenue: 1
-        }
-      }
+      { $project: { recipeName: "$recipe.recipeName", totalQuantity: "$quantity", totalRevenue: "$revenue" } }
     ])
   ]);
 
   return {
-    today: {
-      revenue: todaySales[0]?.totalNetRevenue || 0,
-      profit: todaySales[0]?.totalProfit || 0,
-      items: todaySales[0]?.totalItems || 0
-    },
-    week: {
-      revenue: weekSales[0]?.totalNetRevenue || 0,
-      profit: weekSales[0]?.totalProfit || 0
-    },
-    month: {
-      revenue: monthSales[0]?.totalNetRevenue || 0,
-      profit: monthSales[0]?.totalProfit || 0
-    },
+    today: { revenue: todaySales[0]?.revenue || 0, profit: todaySales[0]?.profit || 0, items: todaySales[0]?.items || 0 },
+    week: { revenue: weekSales[0]?.revenue || 0, profit: weekSales[0]?.profit || 0 },
+    month: { revenue: monthSales[0]?.revenue || 0, profit: monthSales[0]?.profit || 0 },
     topProducts: topProducts || []
   };
-};
-
-/**
- * Delete sales record (for admin only)
- */
-export const deleteSales = async (salesId) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    // Find sales record
-    const sales = await salesModel.findById(salesId).session(session);
-    if (!sales) {
-      throw new Error("Sales record not found");
-    }
-
-    // Delete all sales items
-    await salesItemModel.deleteMany({ salesId: salesId }).session(session);
-
-    // Delete sales record
-    await salesModel.findByIdAndDelete(salesId).session(session);
-
-    await session.commitTransaction();
-    session.endSession();
-
-    return { message: "Sales record deleted successfully" };
-
-  } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-    throw error;
-  }
 };

@@ -1,0 +1,181 @@
+
+
+DOCDATEITEMTYPEITEMUOMQTYRATETOTALTAXVALUEDISCAMOUNTSALEAMOUNT
+POS: DINE IN
+CATEGORY: Biriyani Bowl
+08/05/26Food ItemsChicken BiriyaniEach431807740007740
+08/05/26Food ItemsVeg BiriyaniEach414056000560
+478300008300
+CATEGORY: Burger
+08/05/26Food ItemsCrispy Zinger BurgerEach121501800001800
+08/05/26Food ItemsCrispy Zinger Double StackEach52201100001100
+08/05/26Food ItemsSpicy Paneer Melt BurgerEach113013000130
+08/05/26Food ItemsVeg Surprise BurgerEach11951045001045
+294075004075
+CATEGORY: Chicken Bites
+08/05/26Food ItemsChicken NuggetsEach214028000280
+08/05/26Food ItemsChicken PopcornEach311033000330
+08/05/26Food ItemsChicken Zinger SpripsEach115015000150
+08/05/26Food ItemsFried Chicken With Garlic DipEach315045000450
+91210001210
+CATEGORY: Chocolate/Candy
+08/05/26Food ItemsJelly PopsEach220400040
+08/05/26Food ItemsMarshmallow 40Each140400040
+08/05/26Food ItemsYoga BarEach245900090
+517000170
+CATEGORY: Coffee
+08/05/26Food ItemsAmericanoEach150500050
+08/05/26Food ItemsBlack CoffeeEach120200020
+08/05/26Food ItemsCappuccinoEach111011000110
+08/05/26Food ItemsFilter CoffeeEach214084000840
+08/05/26Food ItemsMacchiatoEach245900090
+261110001110
+CATEGORY: Container 10
+08/05/26Service ItemsContainer 5Each155005
+08/05/26Service ItemsContainer Chrage 10Each710700070
+8750075
+CATEGORY: Coolers(Mojitos)
+08/05/26Food ItemsGreen Apple CoolerEach29018000180
+08/05/26Food ItemsLychee CoolersEach190900090
+08/05/26Food ItemsMint & Lime CoolerEach190900090
+08/05/26Food ItemsOrange CoolerEach190900090
+08/05/26Food ItemsPassion Fruit CoolerEach29018000180
+763000630
+CATEGORY: Desserts
+08/05/26Food ItemsMango Falooda ClassicEach116016000160
+08/05/26Food ItemsPrajas Special Falooda ClassicEach119019000190
+235000350
+CATEGORY: Eggs(Served With Toast)
+PRAJAIANS RESTO CAFÉ
+KODAKARA
+ItemWise Sales
+ From Date : 08-05-2026 To Date : 08-05-2026
+
+DOCDATEITEMTYPEITEMUOMQTYRATETOTALTAXVALUEDISCAMOUNTSALEAMOUNT
+08/05/26Food ItemsBeef OmeletteEach110010000100
+08/05/26Food ItemsCheese OmeletteEach112012000120
+08/05/26Food ItemsOmeletteEach37021000210
+543000430
+CATEGORY: Frappe
+08/05/26Food ItemsChocolate Hazelnut FrappeEach116016000160
+08/05/26Food ItemsCold CoffeeEach112012000120
+08/05/26Food ItemsHazelnut FrappeEach114014000140
+08/05/26Food ItemsIrish FrappeEach114014000140
+456000560
+CATEGORY: French Fries
+08/05/26Food ItemsCrispy Loaded (Chicken)Each120020000200
+08/05/26Food ItemsFrench Fries Cajun Spiced LargeEach113013000130
+08/05/26Food ItemsFrench Fries Cajun Spiced MediumEach28016000160
+08/05/26Food ItemsFrench Fries Classic LargeEach112012000120
+08/05/26Food ItemsFrench Fries Classic MediumEach47028000280
+08/05/26Food ItemsFrench Fries Dynamite (Beef)Each219038000380
+08/05/26Food ItemsFrench Fries Dynamite (Chicken)Each61801080001080
+08/05/26Food ItemsFrench Fries Loaded (veg)Each116016000160
+182510002510
+CATEGORY: Fresh Juice
+08/05/26Food ItemsCarrotEach39027000270
+08/05/26Food ItemsFresh LimeEach133545500455
+08/05/26Food ItemsFresh Lime With SodaEach44016000160
+08/05/26Food ItemsGrapeEach39027000270
+08/05/26Food ItemsMint LimeEach245900090
+08/05/26Food ItemsOrange(Citrus)Each29018000180
+08/05/26Food ItemsPina ColadaEach155550055
+08/05/26Food ItemsPineapple Fresh JuiceEach69054000540
+08/05/26Food ItemsWatermelon Fresh JuiceEach58040000400
+392420002420
+CATEGORY: Ice Cream(Scoops)
+08/05/26Food ItemsChocolate Ice Cream ScoopEach35015000150
+08/05/26Food ItemsMango Ice Cream ScoopEach25010000100
+08/05/26Food ItemsSpanish Ice Cream ScoopEach25010000100
+08/05/26Food ItemsStrawberry  Ice Cream With SaladEach180800080
+08/05/26Food ItemsTender Coconut Ice Cream With SalaEach29018000180
+08/05/26Food ItemsVanila Ice Cream ScoopEach150500050
+08/05/26Food ItemsVanila Ice Cream With SaladEach180800080
+1274000740
+CATEGORY: Ice Creame Retail
+08/05/26Food ItemsBlueberry Mini TubEach36018000180
+08/05/26Food ItemsChikoo Mini TubEach150500050
+08/05/26Food ItemsRed Velvet Mini TubEach160600060
+PRAJAIANS RESTO CAFÉ
+KODAKARA
+ItemWise Sales
+ From Date : 08-05-2026 To Date : 08-05-2026
+
+DOCDATEITEMTYPEITEMUOMQTYRATETOTALTAXVALUEDISCAMOUNTSALEAMOUNT
+08/05/26Food ItemsTender Coconut Mini TubEach160600060
+08/05/26Food ItemsVanila ConetopEach240800080
+843000430
+CATEGORY: Iced Coffee
+08/05/26Food ItemsIced CoffeeEach37021000210
+08/05/26Food ItemsIced Hazelnut  CoffeeEach190900090
+08/05/26Food ItemsIced Salted Caramel  CoffeeEach190900090
+539000390
+CATEGORY: Iced Tea
+08/05/26Food ItemsGreen Apple Iced TeaEach190900090
+1900090
+CATEGORY: Kombucha
+08/05/26Food ItemsAlphonsa MangoEach114914900149
+08/05/26Food ItemsBerry MixEach114914900149
+08/05/26Food ItemsLychee RoseEach114914900149
+344700447
+CATEGORY: Lassi
+08/05/26Food ItemsMango LassiEach39027000270
+08/05/26Food ItemsOrange LassiEach190900090
+08/05/26Food ItemsStrawberry LassiEach190900090
+545000450
+CATEGORY: Milk Shake
+08/05/26Food ItemsBlueberry Milk ShakeEach217034000340
+08/05/26Food ItemsChikkoo Milk ShakeEach314042000420
+08/05/26Food ItemsChocolate Milk ShakeEach314042000420
+08/05/26Food ItemsMango Milk ShakeEach414056000560
+08/05/26Food ItemsPeanut Butter Milk ShakeEach116016000160
+08/05/26Food ItemsSpanish Milk ShakeEach415060000600
+08/05/26Food ItemsStrawberry Milk ShakeEach114014000140
+08/05/26Food ItemsTender Coconut Milk ShakeEach317051000510
+213150003150
+CATEGORY: PASTA
+08/05/26Food ItemsArrabbiata PastaEach117017000170
+08/05/26Food ItemsCream White Sauce PastaEach117017000170
+08/05/26Food ItemsCreame White Sauce Pasta ChickenEach318054000540
+588000880
+CATEGORY: Pastry
+08/05/26Food ItemsHoney Cake MangoEach216032000320
+08/05/26Food ItemsRussian Honey ClassicEach214028000280
+460000600
+CATEGORY: Quick Bites
+08/05/26Food ItemsChicken CutletEach83528000280
+08/05/26Food ItemsVeg CutletEach325750075
+1135500355
+CATEGORY: Salads
+PRAJAIANS RESTO CAFÉ
+KODAKARA
+ItemWise Sales
+ From Date : 08-05-2026 To Date : 08-05-2026
+
+DOCDATEITEMTYPEITEMUOMQTYRATETOTALTAXVALUEDISCAMOUNTSALEAMOUNT
+08/05/26Food ItemsMango SaladEach117017000170
+117000170
+CATEGORY: Sandwich
+08/05/26Food ItemsChicken Tikka SandwichEach101501500001500
+08/05/26Food ItemsClub SandwichEach317051000510
+08/05/26Food ItemsOmelette SandwichEach210020000200
+08/05/26Food ItemsVeg SandwichEach79063000630
+222840002840
+CATEGORY: Soft Drinks
+08/05/26Food ItemsWater 500mlEach15913500135
+1513500135
+CATEGORY: Tea
+08/05/26Food ItemsLemon TeaEach120200020
+1200020
+CATEGORY: Wraps
+08/05/26Food ItemsBeef WrapEach116016000160
+08/05/26Food ItemsChicken Tikka WrapEach101501500001500
+08/05/26Food ItemsCrispy Zinger WrapEach516080000800
+08/05/26Food ItemsPaneer Tikka WrapEach114014000140
+172600002600
+330351370035137
+330351370035137
+PRAJAIANS RESTO CAFÉ
+KODAKARA
+ItemWise Sales
+ From Date : 08-05-2026 To Date : 08-05-2026

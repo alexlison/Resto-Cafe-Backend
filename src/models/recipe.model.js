@@ -20,6 +20,11 @@ const recipeSchema = new mongoose.Schema({
             quantity: {
                 type: Number,
                 required: true
+            },
+                unit: {
+                type: String,
+                enum: ["g", "ml", "pcs","ltr","kg"],
+                required: true
             }
 
         }
