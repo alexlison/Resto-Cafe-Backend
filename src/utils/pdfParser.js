@@ -1,196 +1,278 @@
 import fs from "fs";
-import { PDFParse } from "pdf-parse";
 
 /**
- * Extract text from PDF file.
- *
- * IMPORTANT: this requires "pdf-parse" v2.x in package.json, e.g.
- *   npm install pdf-parse@^2.4.5
- * The old v1.x bundles a very old copy of pdf.js (~2016) that throws
- * "bad XRef entry" on PDFs written by some generators (e.g. modern
- * cross-reference streams) and gives up entirely on that file. v2 uses a
- * current pdf.js build and correctly parses a much wider range of PDFs.
- * It also reliably preserves spaces between words, which v1 did not
- * always do (v1 silently concatenated words together on some PDFs,
- * producing text like "ChickenBiriyaniEach43180..." with no spaces at
- * all — that's what the old parseItemRow's digit-splitting logic below
- * was originally trying to work around).
+ * Extract text from PDF file
  */
 export const extractPDFText = async (filePath) => {
-  const dataBuffer = fs.readFileSync(filePath);
-  const parser = new PDFParse({ data: dataBuffer });
-
   try {
-    const result = await parser.getText();
-    return result?.text || "";
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    const dataBuffer = fs.readFileSync(filePath);
+
+    let pdfParse;
+    try {
+      const module = await import('pdf-parse');
+      pdfParse = module.default || module;
+    } catch (e1) {
+      try {
+        const { createRequire } = await import('module');
+        const require = createRequire(import.meta.url);
+        pdfParse = require('pdf-parse');
+      } catch (e2) {
+        throw new Error('pdf-parse module not found. Please install: npm install pdf-parse');
+      }
+    }
+
+    if (typeof pdfParse !== 'function') {
+      throw new Error('pdf-parse is not a function');
+    }
+
+    let text = "";
+    try {
+      const result = await pdfParse(dataBuffer);
+      text = result?.text || "";
+    } catch (e) {
+      const result = await pdfParse(dataBuffer, { version: 'v2' });
+      text = result?.text || "";
+    }
+
+    try {
+      fs.writeFileSync('./debug_extracted_pdf.txt', text);
+    } catch (e) {
+      // non-fatal - debug convenience only
+    }
+
+    return text;
   } catch (error) {
     throw new Error(`Failed to read PDF: ${error.message}`);
-  } finally {
-    if (typeof parser.destroy === "function") {
-      await parser.destroy();
-    }
   }
 };
 
-// Valid unit-of-measure tokens, matched as a WHOLE token (not a substring),
-// since text is now reliably space-separated.
-const UOM_TOKENS = new Set(["each", "per", "kg", "ltr", "ml", "pcs", "g"]);
-
-// A numeric field, allowing plain integers or decimals like "65.00".
-const NUMBER_RE = /^-?\d+(\.\d+)?$/;
+// Known unit-of-measure tokens that can appear at the very end of an
+// "item name + UOM" chunk with NO separating space before the numbers that
+// follow (e.g. "Chicken BiriyaniEach43180..."). Sorted longest-first so a
+// more specific UOM is matched before a shorter one that could also
+// technically match.
+const UOM_LIST = [
+  'container', 'conetop', 'bottle', 'packet', 'pieces', 'plate',
+  'scoop', 'piece', 'glass', 'pack', 'each', 'bowl', 'pcs', 'tub',
+  'nos', 'cup', 'can', 'box', 'ltr', 'kg', 'ml', 'g'
+].sort((a, b) => b.length - a.length);
 
 /**
- * Parse sales data from extracted text.
+ * Strip a known UOM token off the end of `str`, case-insensitively.
+ * Returns { name, uom } - uom is null if nothing matched.
  */
-export const parseSalesText = (text) => {
-  console.log("Raw text length:", text.length);
-  console.log("First 500 chars:", text.substring(0, 500));
-
-  // Normalize line endings and collapse runs of spaces/tabs — but never
-  // touch newlines here, since parseItemRow relies on one item per line.
-  let cleanText = text.replace(/\r/g, "\n");
-  cleanText = cleanText.replace(/\t/g, " ");
-  cleanText = cleanText.replace(/[ ]{2,}/g, " ");
-
-  const lines = cleanText.split("\n").map(line => line.trim()).filter(line => line.length > 0);
-  console.log("Total lines:", lines.length);
-
-  let salesDate = null;
-  const items = [];
-
-  // Date patterns, checked in order of specificity
-  const datePatterns = [
-    /From Date\s*:\s*(\d{2}-\d{2}-\d{4})/,
-    /From Date\s*:\s*(\d{2}\/\d{2}\/\d{4})/,
-    /(\d{2}-\d{2}-\d{4})/,
-    /(\d{2}\/\d{2}\/\d{4})/
-  ];
-
-  for (const line of lines) {
-    for (const pattern of datePatterns) {
-      const match = line.match(pattern);
-      if (match) {
-        salesDate = match[1];
-        console.log("Found sales date:", salesDate);
-        break;
-      }
-    }
-    if (salesDate) break;
-  }
-
-  if (!salesDate) {
-    for (const line of lines) {
-      const dateMatch = line.match(/(\d{2}[\/-]\d{2}[\/-]\d{4})/);
-      if (dateMatch) {
-        salesDate = dateMatch[1];
-        console.log("Found sales date from line:", salesDate);
-        break;
-      }
+const stripTrailingUom = (str) => {
+  const lower = str.toLowerCase();
+  for (const uom of UOM_LIST) {
+    if (lower.endsWith(uom) && str.length > uom.length) {
+      return { name: str.slice(0, str.length - uom.length).trim(), uom };
     }
   }
-
-  for (const line of lines) {
-    // Skip header / metadata / footer lines
-    const upper = line.toUpperCase();
-    if (
-      upper.includes("PRAJAIANS") || upper.includes("PRAJAINS") || upper.includes("RESTO CAF") ||
-      upper.includes("ITEMWISE SALES") || upper.includes("ITEM WISE SALES") ||
-      upper.includes("FROM DATE") || upper.includes("TO DATE") ||
-      upper.startsWith("DOCDATE") || upper.includes("CATEGORY:") ||
-      upper.startsWith("POS:") || upper.includes("KODAKARA") ||
-      upper.startsWith("TOTAL") || upper.startsWith("-- ") ||
-      line === "Food Items" || line === "Service Items"
-    ) {
-      continue;
-    }
-
-    // Skip pure numeric subtotal rows, e.g. "47 8300 0 0 8300" or "330 35137 0 0 35137"
-    if (/^[\d.\s]+$/.test(line)) {
-      continue;
-    }
-
-    const itemMatch = parseItemRow(line);
-    if (itemMatch) {
-      console.log("Parsed item:", itemMatch.itemName, "Qty:", itemMatch.quantity, "Rate:", itemMatch.rate);
-      items.push(itemMatch);
-    } else {
-      console.log("Failed to parse item row:", line);
-    }
-  }
-
-  console.log("Total items parsed:", items.length);
-
-  return {
-    salesDate,
-    items,
-    totalItems: items.length
-  };
+  return { name: str.trim(), uom: null };
 };
 
 /**
- * Parse a single item row using whitespace tokens, e.g.:
- *   "08/05/26 Food Items Chicken Biriyani Each 43 180 7740 0 0 7740"
- *   "08/05/26 Food Items Garlic Bread Each 15 65.00 975.00 0.00 0.00 975.00"
+ * Split a run-together digit blob (e.g. "431807740007740") into
+ * { qty, rate, total, tax, discount, saleAmount }.
  *
- * Strategy: the row's shape is fixed from both ends —
- *   [DATE] [Food Items | Service Items]? <item name tokens...> <UOM> <6 numbers>
- * so we peel off the date from the front, the optional item-type label,
- * then take the LAST 6 whitespace tokens as the numeric fields and the
- * token right before them as the UOM. Everything left in the middle is
- * the item name — however many words it has, and even if some of those
- * words are themselves numbers (e.g. "Marshmallow 40", "Water 500ml").
+ * There's no separator between the six numbers, so `total = qty * rate`
+ * (an exact mathematical constraint) is used to find where each number
+ * starts and ends. Most rows in this export have zero tax and zero
+ * discount, in which case saleAmount also equals total - so the blob has
+ * the recognizable, unambiguous shape `${qty}${rate}${total}00${total}`.
+ * That's checked first. A more general fallback (allowing non-zero
+ * tax/discount, validated via saleAmount = total + tax - discount) is
+ * tried if the primary pattern doesn't match any split.
  */
-const parseItemRow = (line) => {
-  const tokens = line.split(/\s+/);
-  if (tokens.length < 8) return null; // date + item + uom + 6 numbers, minimum
+const decomposeDigitBlob = (blob) => {
+  if (!/^\d+$/.test(blob)) return null;
 
-  if (!/^\d{2}[\/-]\d{2}[\/-]\d{2,4}$/.test(tokens[0])) return null;
-
-  let idx = 1;
-  if (
-    tokens[idx] && tokens[idx + 1] &&
-    (
-      (tokens[idx].toLowerCase() === "food" && tokens[idx + 1].toLowerCase() === "items") ||
-      (tokens[idx].toLowerCase() === "service" && tokens[idx + 1].toLowerCase() === "items")
-    )
-  ) {
-    idx += 2;
+  for (let qtyLen = 1; qtyLen <= 3; qtyLen++) {
+    if (qtyLen >= blob.length) break;
+    const qty = parseInt(blob.slice(0, qtyLen), 10);
+    for (let rateLen = 1; rateLen <= 5; rateLen++) {
+      const rateEnd = qtyLen + rateLen;
+      if (rateEnd >= blob.length) break;
+      const rate = parseInt(blob.slice(qtyLen, rateEnd), 10);
+      const total = qty * rate;
+      const totalStr = String(total);
+      const expected = `${totalStr}00${totalStr}`;
+      if (blob.slice(rateEnd) === expected) {
+        return { qty, rate, total, tax: 0, discount: 0, saleAmount: total };
+      }
+    }
   }
 
-  const rest = tokens.slice(idx);
-  if (rest.length < 7) return null; // item name (>=1 token) + uom + 6 numbers
+  // Fallback: non-zero tax/discount, validated via saleAmount = total + tax - discount
+  for (let qtyLen = 1; qtyLen <= 3; qtyLen++) {
+    if (qtyLen >= blob.length) break;
+    const qty = parseInt(blob.slice(0, qtyLen), 10);
+    for (let rateLen = 1; rateLen <= 5; rateLen++) {
+      const rateEnd = qtyLen + rateLen;
+      if (rateEnd >= blob.length) break;
+      const rate = parseInt(blob.slice(qtyLen, rateEnd), 10);
+      const total = qty * rate;
+      const totalStr = String(total);
+      const totalEnd = rateEnd + totalStr.length;
+      if (blob.slice(rateEnd, totalEnd) !== totalStr) continue;
+      const tail = blob.slice(totalEnd);
+      for (let taxLen = 1; taxLen <= tail.length - 2; taxLen++) {
+        const tax = parseInt(tail.slice(0, taxLen), 10);
+        for (let discountLen = 1; discountLen <= tail.length - taxLen - 1; discountLen++) {
+          const discount = parseInt(tail.slice(taxLen, taxLen + discountLen), 10);
+          const saleAmountStr = tail.slice(taxLen + discountLen);
+          if (!saleAmountStr) continue;
+          const saleAmount = parseInt(saleAmountStr, 10);
+          if (saleAmount === total + tax - discount) {
+            return { qty, rate, total, tax, discount, saleAmount };
+          }
+        }
+      }
+    }
+  }
 
-  const last6 = rest.slice(-6);
-  if (!last6.every(t => NUMBER_RE.test(t))) return null;
+  return null;
+};
 
-  const uomToken = rest[rest.length - 7];
-  if (!uomToken || !UOM_TOKENS.has(uomToken.toLowerCase())) return null;
+/**
+ * Parse a single item line. Handles two layouts seen in the wild:
+ *  1. Cleanly space-separated columns
+ *     (e.g. "08/05/26 Food Items Beef Omelette Each 1 100 100 0 0 100")
+ *  2. Columns jammed together with no separating spaces at all - only the
+ *     item name may contain internal spaces
+ *     (e.g. "08/05/26Food ItemsChicken BiriyaniEach431807740007740")
+ *     This is how this restaurant's "ItemWise Sales" PDF export actually
+ *     renders (pdf-parse reflects the PDF's own text layout, which has no
+ *     literal space characters between adjacent columns here).
+ */
+const parseItem = (line) => {
+  const dateMatch = line.match(/(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/);
+  if (!dateMatch) return null;
 
-  const itemName = rest.slice(0, rest.length - 7).join(" ").trim();
-  if (!itemName) return null;
+  let rest = line.slice(dateMatch.index + dateMatch[0].length).trim();
 
-  const [qty, rate, total, tax, discount, saleAmount] = last6.map(Number);
+  // Strip the item-type prefix, however it's spaced/cased.
+  rest = rest.replace(/^\s*(Food\s*Items|Service\s*Items)\s*/i, "");
+  if (!rest) return null;
+
+  // --- Attempt 1: cleanly space-separated columns ---
+  const tokens = rest.split(/\s+/);
+  if (tokens.length >= 4) {
+    let numStart = tokens.length;
+    while (
+      numStart > 0 &&
+      (tokens.length - numStart) < 6 &&
+      /^-?\d+(\.\d+)?$/.test(tokens[numStart - 1])
+    ) {
+      numStart--;
+    }
+    const numericTail = tokens.slice(numStart).map(Number);
+    if (numericTail.length >= 3) {
+      const nameAndUom = tokens.slice(0, numStart);
+      if (nameAndUom.length > 0) {
+        const itemName = (nameAndUom.length > 1 ? nameAndUom.slice(0, -1) : nameAndUom).join(" ").trim();
+        if (itemName) {
+          let qty, rate, total, tax = 0, discount = 0, saleAmount;
+          switch (numericTail.length) {
+            case 6: [qty, rate, total, tax, discount, saleAmount] = numericTail; break;
+            case 5: [qty, rate, total, tax, saleAmount] = numericTail; break;
+            case 4: [qty, rate, total, saleAmount] = numericTail; break;
+            default: [qty, rate, total] = numericTail; saleAmount = total;
+          }
+          if (saleAmount === undefined) saleAmount = total;
+          if (qty > 0 && rate > 0) {
+            return { itemName, quantity: qty, rate, total, tax, discount, saleAmount };
+          }
+        }
+      }
+    }
+  }
+
+  // --- Attempt 2: run-together columns, no spaces at all ---
+  const digitMatch = rest.match(/(\d+)$/);
+  if (!digitMatch) return null;
+
+  const digitBlob = digitMatch[1];
+  const namePlusUom = rest.slice(0, rest.length - digitBlob.length);
+  if (!namePlusUom) return null;
+
+  const { name: itemName, uom } = stripTrailingUom(namePlusUom);
+  if (!itemName || !uom) return null;
+
+  const decomposed = decomposeDigitBlob(digitBlob);
+  if (!decomposed) return null;
+
+  const { qty, rate, total, tax, discount, saleAmount } = decomposed;
   if (qty <= 0 || rate <= 0) return null;
 
   return { itemName, quantity: qty, rate, total, tax, discount, saleAmount };
 };
 
 /**
- * Convert extracted date to proper Date object
+ * Parse sales data from extracted text
+ */
+export const parseSalesText = (text, { debug = false } = {}) => {
+  const cleanText = text.replace(/\r/g, "\n").replace(/\t/g, " ");
+  const lines = cleanText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+
+  let salesDate = null;
+  for (const line of lines) {
+    const dateMatch = line.match(/(\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/);
+    if (dateMatch) {
+      salesDate = dateMatch[1];
+      break;
+    }
+  }
+
+  const items = [];
+  const skipped = [];
+  const startsWithDate = /^\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/;
+
+  for (const line of lines) {
+    const item = parseItem(line);
+    if (item) {
+      items.push(item);
+    } else if (startsWithDate.test(line)) {
+      // Looked like a data row (starts with a date) but still failed to
+      // parse - worth surfacing so it's obvious something needs attention.
+      skipped.push(line);
+    }
+    // Otherwise it's a header/title/category/footer line - ignore quietly.
+  }
+
+  if (items.length === 0 && skipped.length > 0) {
+    console.warn(`[pdfParser] Parsed 0 items out of ${skipped.length} candidate line(s). First few unmatched lines:`);
+    skipped.slice(0, 10).forEach(l => console.warn("  ->", l));
+  } else if (debug || skipped.length > 0) {
+    console.log(`[pdfParser] Parsed ${items.length} item(s) from ${lines.length} lines (${skipped.length} candidate line(s) failed to parse).`);
+    if (skipped.length > 0) {
+      skipped.slice(0, 10).forEach(l => console.warn("  UNPARSED ->", l));
+    }
+  }
+
+  return { salesDate, items };
+};
+
+/**
+ * Convert date string to Date object
  */
 export const convertToDate = (dateStr) => {
   if (!dateStr) return null;
 
-  let parts = dateStr.split(/[-/]/);
-  if (parts.length === 3) {
-    // Handle 2-digit year
-    if (parts[2].length === 2) {
-      const year = parseInt(parts[2]);
-      parts[2] = year >= 24 ? `19${parts[2]}` : `20${parts[2]}`;
-    }
-    // Format: DD-MM-YYYY
-    return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+  const parts = dateStr.split(/[-/]/);
+  if (parts.length !== 3) return null;
+
+  let day = parseInt(parts[0]);
+  let month = parseInt(parts[1]) - 1;
+  let year = parseInt(parts[2]);
+
+  if (year < 100) {
+    year = year < 69 ? 2000 + year : 1900 + year;
   }
 
-  return null;
+  return new Date(year, month, day);
 };

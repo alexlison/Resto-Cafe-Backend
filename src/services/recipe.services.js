@@ -92,7 +92,7 @@ export const editRecipeService = async (id, data, imageUrl = null) => {
     const updatedRecipe = await recipes.findByIdAndUpdate(
         id,
         data,
-        { new: true }
+        { new: true, runValidators: true }
     );
 
     return updatedRecipe;

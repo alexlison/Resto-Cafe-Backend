@@ -1,5 +1,6 @@
 import multer from "multer";
 import fs from "fs";
+import path from "path";
 
 // Ensure sales directory exists
 const salesDir = "./sales";
@@ -9,7 +10,7 @@ if (!fs.existsSync(salesDir)) {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "./sales");
+    cb(null, salesDir);
   },
   filename: (req, file, cb) => {
     const timestamp = Date.now();
@@ -18,7 +19,6 @@ const storage = multer.diskStorage({
   }
 });
 
-// File filter - only allow PDFs
 const fileFilter = (req, file, cb) => {
   if (file.mimetype === "application/pdf") {
     cb(null, true);
@@ -28,11 +28,9 @@ const fileFilter = (req, file, cb) => {
 };
 
 const uploadSalesPDF = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  }
+  storage,
+  fileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 export default uploadSalesPDF;
