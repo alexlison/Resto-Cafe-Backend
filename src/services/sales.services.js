@@ -307,7 +307,7 @@ export const previewSalesPDF = async (file) => {
         recipeFound,
         recipeId: recipe?._id || null,
         recipeName: recipe?.recipeName || null,
-        recipeCost: recipe?.recipeCost || null,
+        recipeImage: recipe?.recipeImage || null,
         sellingPrice: recipe?.sellingPrice || null,
         ingredients: ingredientList,
         grossRevenue: gross,
@@ -604,7 +604,7 @@ export const getAllSales = async (page = 1, limit = 10) => {
     .sort({ salesDate: -1 })
     .skip(skip)
     .limit(limit)
-    .populate("processedBy", "staff.name staff.email");
+    .populate("processedBy", "staff.name staff.email ");
   const total = await salesModel.countDocuments();
   return { sales, total, page, limit, totalPages: Math.ceil(total / limit) };
 };
@@ -627,7 +627,7 @@ export const getSalesDetails = async (salesId) => {
   const sales = await salesModel.findById(salesId).populate("processedBy", "staff.name staff.email");
   if (!sales) throw new Error("Sales record not found");
   const items = await salesItemModel.find({ salesId })
-    .populate("recipeId", "recipeName sellingPrice recipeCost");
+    .populate("recipeId", "recipeName recipeImage sellingPrice recipeCost");
   return { sales, items };
 };
 

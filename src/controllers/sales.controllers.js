@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import {
   previewSalesPDF,
   approveSalesPDF,
@@ -7,6 +9,9 @@ import {
   getSalesSummary as getSalesSummaryService,
   addManualSales
 } from "../services/sales.services.js";
+
+// Must match the upload destination configured in sales.multer.js
+const salesDir = "./sales";
 
 /**
  * Preview sales PDF without saving
@@ -39,13 +44,36 @@ export const previewSales = async (req, res) => {
  */
 export const approveSales = async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ status: "FAILED", message: "No PDF file found" });
-    }
-
     const userId = req.user?.userId || req.user?.id;
     if (!userId) {
       return res.status(401).json({ status: "FAILED", message: "User not authenticated" });
+    }
+
+    // Reuse the PDF that was already saved to disk during the preview step,
+    // instead of requiring (and writing) a brand new upload on approve.
+    // Still supports a direct req.file upload for backward compatibility,
+    // in case approve is ever called without a prior preview.
+    let file = req.file;
+
+    if (!file) {
+      const { pdfFilePath } = req.body;
+      if (!pdfFilePath) {
+        return res.status(400).json({ status: "FAILED", message: "No PDF file found" });
+      }
+
+      // Only trust the filename portion, resolved against the trusted sales
+      // upload directory, so a client-supplied path can't escape it.
+      const fileName = path.basename(pdfFilePath);
+      const resolvedPath = path.join(salesDir, fileName);
+
+      if (!fs.existsSync(resolvedPath)) {
+        return res.status(400).json({
+          status: "FAILED",
+          message: "Previewed PDF file not found. Please upload and preview again."
+        });
+      }
+
+      file = { path: resolvedPath, filename: fileName };
     }
 
     const { manualItems } = req.body;
@@ -61,7 +89,7 @@ export const approveSales = async (req, res) => {
       }
     }
 
-    const result = await approveSalesPDF(req.file, userId, parsedManualItems);
+    const result = await approveSalesPDF(file, userId, parsedManualItems);
 
     return res.status(201).json({
       status: "SUCCESS",
