@@ -132,6 +132,13 @@ export const loginService = async (email, password) => {
         throw new Error("Invalid email or password");
     }
 
+    // ===== CHECK IF USER IS ACTIVE =====
+    if (user.isActive === false) {
+        const error = new Error("Your account has been deactivated. Please contact administrator.");
+        error.statusCode = 403;
+        throw error;
+    }
+
     let storedPassword = "";
 
     if (userType === "admin") {
